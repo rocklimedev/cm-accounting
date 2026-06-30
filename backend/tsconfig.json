@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+
+    "target": "ES2023",
+    "lib": ["ES2023"],
+
+    "outDir": "./dist",
+    "rootDir": "./",
+
+    // No baseUrl anymore
+    "paths": {
+      "@/*": ["./src/*"] // ← Note the added "./"
+    },
+
+    "sourceMap": true,
+    "declaration": true,
+    "removeComments": true,
+
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strictPropertyInitialization": false, // often needed with sequelize
+    "isolatedModules": true,
+    "incremental": true,
+    "skipLibCheck": true,
+
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "strictBindCallApply": false,
+    "noFallthroughCasesInSwitch": false,
+    "types": ["jest", "node"], // ← Add this line
+    "forceConsistentCasingInFileNames": true
+  },
+
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
