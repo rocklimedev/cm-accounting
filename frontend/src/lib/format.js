@@ -18,7 +18,11 @@ export function formatDate(d) {
   if (!d) return "-";
   try {
     const dt = new Date(d.length === 10 ? d + "T00:00:00" : d);
-    return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    return dt.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   } catch {
     return d;
   }
@@ -28,7 +32,13 @@ export function formatDateTime(d) {
   if (!d) return "-";
   try {
     const dt = new Date(d);
-    return dt.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    return dt.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return d;
   }

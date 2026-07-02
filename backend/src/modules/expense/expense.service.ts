@@ -10,12 +10,20 @@ import { ExpenseItem } from './models/expense-item.model';
 import { CreateExpenseReportDto } from './dto/create-expense-report.dto';
 import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
-
+import { ExpenseTitle } from './models/expense-titles.model';
+import { CreateExpenseTitleDto } from './dto/create-expense-title.dto';
 @Injectable()
 export class ExpenseService {
   constructor(
-    @InjectModel(ExpenseReport) private reportModel: typeof ExpenseReport,
-    @InjectModel(ExpenseItem) private itemModel: typeof ExpenseItem,
+    @InjectModel(ExpenseReport)
+    private reportModel: typeof ExpenseReport,
+
+    @InjectModel(ExpenseItem)
+    private itemModel: typeof ExpenseItem,
+
+    @InjectModel(ExpenseTitle)
+    private titleModel: typeof ExpenseTitle,
+
     private sequelize: Sequelize,
     private crypto: CryptoService,
     private auditService: AuditService,
@@ -173,5 +181,98 @@ export class ExpenseService {
     });
 
     return this.findOne(id);
+  }
+  // =====================================
+  // Expense Titles
+  // =====================================
+
+  async getExpenseTitles() {
+    return this.titleModel.findAll({
+      where: {
+        isActive: true,
+      },
+      order: [['title', 'ASC']],
+    });
+  }
+
+  async getExpenseTitle(id: string) {
+    const title = await this.titleModel.findByPk(id);
+
+    if (!title) {
+      throw new NotFoundException('Expense title not found');
+    }
+
+    return title;
+  }
+
+  async createExpenseTitle(dto: CreateExpenseTitleDto, userId: string) {
+    const exists = await this.titleModel.findOne({
+      where: {
+        title: dto.title,
+      },
+    });
+
+    if (exists) {
+      throw new BadRequestException('Expense title already exists');
+    }
+
+    const title = await this.titleModel.create({
+      title: dto.title,
+      isActive: dto.isActive ?? true,
+    } as any);
+
+    await this.auditService.log({
+      userId,
+      action: 'CREATE',
+      tableName: 'expense_titles',
+      recordId: title.id,
+      newValue: title.toJSON(),
+    });
+
+    return title;
+  }
+
+  async updateExpenseTitle(
+    id: string,
+    dto: CreateExpenseTitleDto,
+    userId: string,
+  ) {
+    const title = await this.getExpenseTitle(id);
+
+    const oldValue = title.toJSON();
+
+    await title.update({
+      title: dto.title,
+      isActive: dto.isActive,
+    });
+
+    await this.auditService.log({
+      userId,
+      action: 'UPDATE',
+      tableName: 'expense_titles',
+      recordId: title.id,
+      oldValue,
+      newValue: title.toJSON(),
+    });
+
+    return title;
+  }
+
+  async deleteExpenseTitle(id: string, userId: string) {
+    const title = await this.getExpenseTitle(id);
+
+    await title.destroy();
+
+    await this.auditService.log({
+      userId,
+      action: 'DELETE',
+      tableName: 'expense_titles',
+      recordId: id,
+      oldValue: title.toJSON(),
+    });
+
+    return {
+      message: 'Expense title deleted successfully',
+    };
   }
 }

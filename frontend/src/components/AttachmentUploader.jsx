@@ -1,12 +1,24 @@
 import React, { useRef, useState } from "react";
 import { api, attachmentUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Image as ImageIcon, X, Loader2, ExternalLink } from "lucide-react";
+import {
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  X,
+  Loader2,
+  ExternalLink,
+} from "lucide-react";
 import { toast } from "sonner";
 
-const ICON_BY_EXT = (ext) => (["jpg", "jpeg", "png"].includes(ext) ? ImageIcon : FileText);
+const ICON_BY_EXT = (ext) =>
+  ["jpg", "jpeg", "png"].includes(ext) ? ImageIcon : FileText;
 
-export function AttachmentUploader({ attachments = [], onChange, testId = "attachments" }) {
+export function AttachmentUploader({
+  attachments = [],
+  onChange,
+  testId = "attachments",
+}) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -18,10 +30,14 @@ export function AttachmentUploader({ attachments = [], onChange, testId = "attac
         const fd = new FormData();
         fd.append("file", file);
         try {
-          const res = await api.post("/attachments", fd, { headers: { "Content-Type": "multipart/form-data" } });
+          const res = await api.post("/attachments", fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
           next.push(res.data);
         } catch (err) {
-          toast.error(err.response?.data?.detail || `Failed to upload ${file.name}`);
+          toast.error(
+            err.response?.data?.detail || `Failed to upload ${file.name}`,
+          );
         }
       }
       onChange(next);
@@ -40,12 +56,32 @@ export function AttachmentUploader({ attachments = [], onChange, testId = "attac
         data-testid={`${testId}-dropzone`}
       >
         <Upload className="h-6 w-6 mx-auto text-foreground/50" />
-        <div className="text-sm mt-2 text-foreground/70">PDF, XLS, XLSX, JPG, PNG (max 10 MB)</div>
-        <input ref={inputRef} type="file" multiple accept=".pdf,.xls,.xlsx,.jpg,.jpeg,.png" className="hidden"
-          data-testid={`${testId}-input`} onChange={(e) => handleFiles(e.target.files)} />
-        <Button type="button" variant="outline" size="sm" className="mt-3" disabled={uploading}
-          onClick={() => inputRef.current?.click()} data-testid={`${testId}-button`}>
-          {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+        <div className="text-sm mt-2 text-foreground/70">
+          PDF, XLS, XLSX, JPG, PNG (max 10 MB)
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.xls,.xlsx,.jpg,.jpeg,.png"
+          className="hidden"
+          data-testid={`${testId}-input`}
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+          data-testid={`${testId}-button`}
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4 mr-2" />
+          )}
           {uploading ? "Uploading..." : "Choose files"}
         </Button>
       </div>
@@ -54,17 +90,34 @@ export function AttachmentUploader({ attachments = [], onChange, testId = "attac
           {attachments.map((a) => {
             const Icon = ICON_BY_EXT(a.ext);
             return (
-              <div key={a.id} className="flex items-center justify-between border border-border rounded-sm px-3 py-2">
+              <div
+                key={a.id}
+                className="flex items-center justify-between border border-border rounded-sm px-3 py-2"
+              >
                 <span className="flex items-center gap-2 text-sm truncate">
                   <Icon className="h-4 w-4 text-foreground/60 shrink-0" />
                   <span className="truncate">{a.filename}</span>
-                  <span className="text-xs text-foreground/50">({Math.round((a.size || 0) / 1024)} KB)</span>
+                  <span className="text-xs text-foreground/50">
+                    ({Math.round((a.size || 0) / 1024)} KB)
+                  </span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <a href={attachmentUrl(a.id)} target="_blank" rel="noreferrer" className="p-1 hover:bg-secondary rounded-sm" title="Preview">
+                  <a
+                    href={attachmentUrl(a.id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 hover:bg-secondary rounded-sm"
+                    title="Preview"
+                  >
                     <ExternalLink className="h-4 w-4 text-foreground/60" />
                   </a>
-                  <button type="button" onClick={() => remove(a.id)} className="p-1 hover:bg-secondary rounded-sm" title="Remove" data-testid={`${testId}-remove-${a.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => remove(a.id)}
+                    className="p-1 hover:bg-secondary rounded-sm"
+                    title="Remove"
+                    data-testid={`${testId}-remove-${a.id}`}
+                  >
                     <X className="h-4 w-4 text-primary" />
                   </button>
                 </span>

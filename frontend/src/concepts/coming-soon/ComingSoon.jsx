@@ -9,7 +9,9 @@ export default function ComingSoon({ title }) {
       <Card className="border border-border rounded-md bg-card shadow-none p-10 text-center">
         <Construction className="h-8 w-8 mx-auto text-foreground/40" />
         <h2 className="text-base font-semibold mt-3">{title}</h2>
-        <p className="text-sm text-foreground/60 mt-1">This module is being finalised and will be available shortly.</p>
+        <p className="text-sm text-foreground/60 mt-1">
+          This module is being finalised and will be available shortly.
+        </p>
       </Card>
     </Layout>
   );

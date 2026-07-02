@@ -1,0 +1,14 @@
+services:
+  backend:
+    image: ghcr.io/rocklimedev/cm-accounting:latest
+    restart: always
+
+    ports:
+      - "5002:5000"
+
+    env_file:
+      - .env
+
+    environment:
+      NODE_ENV: production
+      PORT: 5000

@@ -17,11 +17,13 @@ export async function fetchReports(params) {
 export function downloadCsv(filename, rows, columns) {
   const header = columns.map((c) => `"${c.label}"`).join(",");
   const lines = rows.map((r) =>
-    columns.map((c) => {
-      const val = c.get(r);
-      const s = val === null || val === undefined ? "" : String(val);
-      return `"${s.replace(/"/g, '""')}"`;
-    }).join(",")
+    columns
+      .map((c) => {
+        const val = c.get(r);
+        const s = val === null || val === undefined ? "" : String(val);
+        return `"${s.replace(/"/g, '""')}"`;
+      })
+      .join(","),
   );
   const csv = [header, ...lines].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

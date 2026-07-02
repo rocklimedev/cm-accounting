@@ -275,3 +275,54 @@ CREATE TABLE encryption_keys (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE debtor_reports (
+    id CHAR(36) PRIMARY KEY,
+    report_date DATE NOT NULL,
+    opening_amount DECIMAL(18,2) DEFAULT 0,
+    new_debtor_total DECIMAL(18,2) DEFAULT 0,
+    received_total DECIMAL(18,2) DEFAULT 0,
+    closing_amount DECIMAL(18,2) DEFAULT 0,
+    remarks_cipher TEXT,
+    remarks_iv VARCHAR(255),
+    remarks_tag VARCHAR(255),
+    hmac_signature VARCHAR(255),
+    previous_hash VARCHAR(255),
+    status ENUM('draft','submitted','posted','void') DEFAULT 'draft',
+    submitted_by CHAR(36),
+    edit_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE debtor_entries (
+    id CHAR(36) PRIMARY KEY,
+    debtor_report_id CHAR(36),
+    entry_type ENUM('new_debtor','debtor_received') NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    payment_mode ENUM('cash','upi','bank','card'), -- null for new_debtor
+    CONSTRAINT fk_debtor_entries_report
+        FOREIGN KEY (debtor_report_id) REFERENCES debtor_reports(id) ON DELETE CASCADE
+);
+CREATE TABLE cash_openings (
+    id CHAR(36) PRIMARY KEY,
+    opening_date DATE NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    previous_amount DECIMAL(18,2),
+    reason TEXT,
+    entered_by CHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cash_openings_user FOREIGN KEY (entered_by) REFERENCES users(id)
+);
+CREATE TABLE cash_adjustments (
+    id CHAR(36) PRIMARY KEY,
+    adjustment_date DATE NOT NULL,
+    type ENUM('add','reduce') NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    reason TEXT NOT NULL,
+    added_by CHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cash_adj_user FOREIGN KEY (added_by) REFERENCES users(id)
+);
+CREATE TABLE expense_titles (
+    id CHAR(36) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL UNIQUE,
+    is_active BOOLEAN DEFAULT TRUE
+);
