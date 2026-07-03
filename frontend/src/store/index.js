@@ -11,6 +11,7 @@ import { rbacApi } from "../api/rbac.api";
 import { salesApi } from "../api/sales.api";
 import { usersApi } from "../api/users.api";
 import { reportsApi } from "../api/reports.api"; // Import the reportsApi
+import { paymentModeApi } from "../api/payment-mode.api";
 export const store = configureStore({
   reducer: {
     [authApi.reducerPath]: authApi.reducer,
@@ -24,6 +25,7 @@ export const store = configureStore({
     [salesApi.reducerPath]: salesApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
     [reportsApi.reducerPath]: reportsApi.reducer, // Add this line for reportsApi
+    [paymentModeApi.reducerPath]: paymentModeApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -39,6 +41,7 @@ export const store = configureStore({
       reportsApi.middleware, // Add this line for reportsApi
       salesApi.middleware,
       usersApi.middleware,
+      paymentModeApi.middleware,
     ),
 
   devTools: import.meta.env.DEV,

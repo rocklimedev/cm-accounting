@@ -1,11 +1,14 @@
 import {
   Column,
   DataType,
-  Model,
-  Table,
-  PrimaryKey,
   Default,
+  HasMany,
+  Model,
+  PrimaryKey,
+  Table,
+  Unique,
 } from 'sequelize-typescript';
+import { SalesReportItem } from './sales-report-item.model';
 
 export enum ReportStatus {
   DRAFT = 'DRAFT',
@@ -23,34 +26,25 @@ export class SalesReport extends Model<SalesReport> {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Column(DataType.DATEONLY)
+  // Sales Number (e.g. SAL-202607-0001)
+  @Unique
+  @Column({
+    type: DataType.STRING(30),
+    allowNull: false,
+  })
+  declare sales_no: string;
+
+  @Column({
+    type: DataType.DATEONLY,
+    allowNull: false,
+  })
   declare report_date: string;
 
   @Default(0)
   @Column(DataType.DECIMAL(18, 2))
   declare gross_amount: number;
 
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  declare cash_amount: number;
-
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  declare upi_amount: number;
-
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  declare bank_amount: number;
-
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  declare card_amount: number;
-
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  declare debtor_amount: number;
-
-  // Encrypted free-text remarks (AES-256-GCM) — never store plaintext remarks.
+  // Encrypted remarks
   @Column(DataType.TEXT)
   declare remarks_cipher: string;
 
@@ -60,11 +54,10 @@ export class SalesReport extends Model<SalesReport> {
   @Column(DataType.STRING(255))
   declare remarks_tag: string;
 
-  // HMAC-SHA256 over the canonical record — detects tampering with posted figures.
+  // Integrity verification
   @Column(DataType.STRING(255))
   declare hmac_signature: string;
 
-  // SHA-256 hash chain link to the previous POSTED sales report — tamper-evident ledger.
   @Column(DataType.STRING(255))
   declare previous_hash: string;
 
@@ -75,4 +68,10 @@ export class SalesReport extends Model<SalesReport> {
   @Default(DataType.NOW)
   @Column(DataType.DATE)
   declare created_at: Date;
+
+  @HasMany(() => SalesReportItem, {
+    foreignKey: 'sales_report_id',
+    as: 'items',
+  })
+  declare items: SalesReportItem[];
 }

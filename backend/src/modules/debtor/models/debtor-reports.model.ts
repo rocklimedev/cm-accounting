@@ -5,9 +5,11 @@ import {
   DataType,
   PrimaryKey,
   Default,
-  HasMany,
   CreatedAt,
+  HasMany,
+  AllowNull,
 } from 'sequelize-typescript';
+import { v4 as uuidv4 } from 'uuid';
 import { DebtorEntry } from './debtor-entries.model';
 
 @Table({
@@ -16,57 +18,103 @@ import { DebtorEntry } from './debtor-entries.model';
 })
 export class DebtorReport extends Model<DebtorReport> {
   @PrimaryKey
+  @Default(() => uuidv4())
   @Column({
     type: DataType.UUID,
+    field: 'id',
   })
   declare id: string;
 
+  @AllowNull(false)
   @Column({
     type: DataType.DATEONLY,
-    allowNull: false,
+    field: 'report_date',
   })
-  reportDate: string;
+  declare reportDate: string;
 
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  openingAmount: number;
+  @Default('0.00')
+  @Column({
+    type: DataType.DECIMAL(18, 2),
+    field: 'opening_amount',
+  })
+  declare openingAmount: string;
 
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  newDebtorTotal: number;
+  @Default('0.00')
+  @Column({
+    type: DataType.DECIMAL(18, 2),
+    field: 'new_debtor_total',
+  })
+  declare newDebtorTotal: string;
 
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  receivedTotal: number;
+  @Default('0.00')
+  @Column({
+    type: DataType.DECIMAL(18, 2),
+    field: 'received_total',
+  })
+  declare receivedTotal: string;
 
-  @Default(0)
-  @Column(DataType.DECIMAL(18, 2))
-  closingAmount: number;
+  @Default('0.00')
+  @Column({
+    type: DataType.DECIMAL(18, 2),
+    field: 'closing_amount',
+  })
+  declare closingAmount: string;
 
-  @Column(DataType.TEXT)
-  remarksCipher: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.TEXT,
+    field: 'remarks_cipher',
+  })
+  declare remarksCipher?: string;
 
-  @Column(DataType.STRING(255))
-  remarksIv: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.STRING(255),
+    field: 'remarks_iv',
+  })
+  declare remarksIv?: string;
 
-  @Column(DataType.STRING(255))
-  remarksTag: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.STRING(255),
+    field: 'remarks_tag',
+  })
+  declare remarksTag?: string;
 
-  @Column(DataType.STRING(255))
-  hmacSignature: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.STRING(255),
+    field: 'hmac_signature',
+  })
+  declare hmacSignature?: string;
 
-  @Column(DataType.STRING(255))
-  previousHash: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.STRING(255),
+    field: 'previous_hash',
+  })
+  declare previousHash?: string;
 
   @Default('draft')
-  @Column(DataType.ENUM('draft', 'submitted', 'posted', 'void'))
-  status: 'draft' | 'submitted' | 'posted' | 'void';
+  @Column({
+    type: DataType.ENUM('draft', 'submitted', 'posted', 'void'),
+    field: 'status',
+  })
+  declare status: 'draft' | 'submitted' | 'posted' | 'void';
 
-  @Column(DataType.UUID)
-  submittedBy: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.UUID,
+    field: 'submitted_by',
+  })
+  declare submittedBy?: string;
 
-  @Column(DataType.TEXT)
-  editReason: string;
+  @AllowNull(true)
+  @Column({
+    type: DataType.TEXT,
+    field: 'edit_reason',
+  })
+  declare editReason?: string;
 
   @CreatedAt
   @Column({
@@ -74,6 +122,7 @@ export class DebtorReport extends Model<DebtorReport> {
     field: 'created_at',
   })
   declare createdAt: Date;
+
   @HasMany(() => DebtorEntry)
-  entries: DebtorEntry[];
+  declare entries: DebtorEntry[];
 }

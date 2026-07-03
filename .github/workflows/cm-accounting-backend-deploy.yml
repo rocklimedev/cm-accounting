@@ -1,0 +1,50 @@
+name: Deploy CM Accounting API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: rocklimedev
+          password: ${{ secrets.CMACCOUNTING_GHCR_TOKEN }}
+
+      - name: Build and push API image
+        run: |
+          docker build --no-cache \
+            -t ghcr.io/rocklimedev/cm-accounting:latest \
+            ./backend
+
+          docker push ghcr.io/rocklimedev/cm-accounting:latest
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: 66.116.204.81
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /opt/apps/cm-accounting
+
+            echo "${{ secrets.CMACCOUNTING_GHCR_TOKEN }}" | docker login ghcr.io \
+              -u rocklimedev --password-stdin
+
+            docker compose pull backend
+            docker compose up -d backend --force-recreate --remove-orphans
+
+            docker image prune -f

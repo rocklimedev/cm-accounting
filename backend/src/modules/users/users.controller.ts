@@ -1,14 +1,24 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
-  Param,
-  Post,
   HttpCode,
   HttpStatus,
   NotFoundException,
+  Param,
+  Patch,
+  Post,
 } from '@nestjs/common';
-import { IsEmail, IsString, IsUUID, MinLength } from 'class-validator';
+
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+} from 'class-validator';
+
 import { UsersService } from './users.service';
 
 class CreateUserDto {
@@ -26,6 +36,33 @@ class CreateUserDto {
   role_id: string;
 }
 
+class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsUUID()
+  role_id?: string;
+
+  @IsOptional()
+  is_active?: boolean;
+}
+
+class ChangePasswordDto {
+  @IsString()
+  @MinLength(8)
+  oldPassword: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -38,6 +75,16 @@ export class UsersController {
     const { password_hash, ...result } = user.toJSON();
 
     return result;
+  }
+
+  @Get()
+  async findAll() {
+    const users = await this.usersService.findAll();
+
+    return users.map((user) => {
+      const { password_hash, ...result } = user.toJSON();
+      return result;
+    });
   }
 
   @Get(':id')
@@ -64,5 +111,33 @@ export class UsersController {
     const { password_hash, ...result } = user.toJSON();
 
     return result;
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    const user = await this.usersService.update(id, dto);
+
+    const { password_hash, ...result } = user.toJSON();
+
+    return result;
+  }
+
+  @Patch(':id/password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @Param('id') id: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.usersService.changePassword(
+      id,
+      dto.oldPassword,
+      dto.newPassword,
+    );
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string) {
+    await this.usersService.remove(id);
   }
 }

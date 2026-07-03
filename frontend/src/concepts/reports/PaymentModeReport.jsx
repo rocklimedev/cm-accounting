@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useGetReconciliationQuery } from "../../api/ledger.api"; // <-- adjust path to wherever ledgerApi.js actually lives
+import { useGetPaymentModeReportQuery } from "../../api/payment-mode.api"; // Adjust path as needed
 
 export default function PaymentModeReport() {
   const [timeline, setTimeline] = useState("this_month");
@@ -21,32 +21,53 @@ export default function PaymentModeReport() {
   const [appliedRange, setAppliedRange] = useState({ start: "", end: "" });
 
   const isCustom = timeline === "custom" || timeline === "date_to_date";
-  const params = isCustom
-    ? { timeline, start: appliedRange.start, end: appliedRange.end }
+
+  // Prepare query parameters
+  const queryParams = isCustom
+    ? { from: appliedRange.start, to: appliedRange.end }
     : { timeline };
 
-  const { data, isFetching: loading } = useGetReconciliationQuery(params, {
-    skip: isCustom && (!appliedRange.start || !appliedRange.end),
-  });
+  const { data: apiResponse, isFetching: loading } =
+    useGetPaymentModeReportQuery(queryParams, {
+      skip: isCustom && (!appliedRange.start || !appliedRange.end),
+    });
+
+  const report = apiResponse?.data || [];
 
   const onApply = () => {
-    if (start && end) setAppliedRange({ start, end });
+    if (start && end) {
+      setAppliedRange({ start, end });
+    }
   };
 
-  const cash = data?.cash || {};
+  // Calculate Grand Totals
+  const totals = report.reduce(
+    (acc, item) => ({
+      expenses: acc.expenses + (item.totalExpenses || 0),
+      debtorReceived: acc.debtorReceived + (item.totalDebtorReceived || 0),
+      newDebtors: acc.newDebtors + (item.totalNewDebtors || 0),
+      netMovement: acc.netMovement + (item.netAmount || 0),
+    }),
+    {
+      expenses: 0,
+      debtorReceived: 0,
+      newDebtors: 0,
+      netMovement: 0,
+    },
+  );
 
   return (
     <Layout title="Payment Mode Reconciliation Report">
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-foreground/60 max-w-xl">
-            Automatically calculated from Retail Sales, Debtor Received and
-            Expenses. New Debtor is never included.{" "}
+            Payment mode wise reconciliation based on Expenses and Debtor
+            Entries.{" "}
             <span className="font-medium">
-              Net Movement = Retail + Debtor Received &minus; Expenses
+              Net Movement = Debtor Received - Expenses
             </span>
-            .
           </p>
+
           <TimelineFilter
             timeline={timeline}
             setTimeline={setTimeline}
@@ -59,128 +80,83 @@ export default function PaymentModeReport() {
         </div>
 
         {loading ? (
-          <Skeleton className="h-64 w-full rounded-md" />
-        ) : (
-          data && (
-            <>
-              <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
-                <div
-                  className="overflow-x-auto thin-scroll"
-                  data-testid="reconciliation-table"
-                >
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Payment Mode</TableHead>
-                        <TableHead className="text-right">Retail</TableHead>
-                        <TableHead className="text-right">
-                          Debtor Received
-                        </TableHead>
-                        <TableHead className="text-right">Expenses</TableHead>
-                        <TableHead className="text-right">
-                          Net Movement
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.rows.map((r) => (
-                        <TableRow
-                          key={r.mode}
-                          data-testid={`recon-row-${r.mode}`}
-                        >
-                          <TableCell className="font-medium">
-                            {r.label}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatMoney(r.retail)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatMoney(r.debtor_received)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatMoney(r.expenses)}
-                          </TableCell>
-                          <TableCell
-                            className={`text-right tabular-nums font-semibold ${r.net_movement < 0 ? "text-primary" : ""}`}
-                          >
-                            {formatMoney(r.net_movement)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-secondary font-bold">
-                        <TableCell>Total</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(data.totals.retail)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(data.totals.debtor_received)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(data.totals.expenses)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(data.totals.net_movement)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </Card>
+          <Skeleton className="h-80 w-full rounded-md" />
+        ) : report.length > 0 ? (
+          <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
+            <div
+              className="overflow-x-auto thin-scroll"
+              data-testid="payment-mode-report-table"
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Payment Mode</TableHead>
+                    <TableHead className="text-right">Expenses</TableHead>
+                    <TableHead className="text-right">
+                      Debtor Received
+                    </TableHead>
+                    <TableHead className="text-right">New Debtors</TableHead>
+                    <TableHead className="text-right">Net Movement</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {report.map((item) => (
+                    <TableRow key={item.paymentModeId}>
+                      <TableCell className="font-medium">
+                        {item.paymentModeName}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({item.paymentModeCode})
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMoney(item.totalExpenses)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMoney(item.totalDebtorReceived)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMoney(item.totalNewDebtors)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums font-semibold ${
+                          item.netAmount >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {formatMoney(item.netAmount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
 
-              <Card
-                className="border border-border rounded-md bg-card shadow-none p-4 max-w-md"
-                data-testid="cash-reconciliation-summary"
-              >
-                <h2 className="text-base font-semibold mb-3">
-                  Cash Reconciliation
-                </h2>
-                <Row
-                  label="Cash Opening"
-                  value={formatMoney(cash.cash_opening)}
-                />
-                <Row
-                  label="Cash Retail"
-                  value={formatMoney(cash.cash_retail)}
-                />
-                <Row
-                  label="Cash Debtor Received"
-                  value={formatMoney(cash.cash_debtor_received)}
-                />
-                <Row
-                  label="Cash Expenses"
-                  value={`- ${formatMoney(cash.cash_expenses)}`}
-                />
-                <Row
-                  label="Cash Net Movement"
-                  value={formatMoney(cash.cash_net_movement)}
-                />
-                <Row
-                  label="Cash Adjustments"
-                  value={formatMoney(cash.cash_adjustments)}
-                />
-                <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
-                  <span className="font-semibold">Net Cash in Hand</span>
-                  <span
-                    className="text-lg font-bold tabular-nums"
-                    data-testid="recon-net-cash"
-                  >
-                    {formatMoney(cash.net_cash_in_hand)}
-                  </span>
-                </div>
-              </Card>
-            </>
-          )
+                  {/* Total Row */}
+                  <TableRow className="bg-secondary/80 font-bold border-t-2">
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(totals.expenses)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(totals.debtorReceived)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(totals.newDebtors)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(totals.netMovement)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">
+              No data available for the selected period.
+            </p>
+          </Card>
         )}
       </div>
     </Layout>
-  );
-}
-
-function Row({ label, value }) {
-  return (
-    <div className="flex items-center justify-between py-1 text-sm">
-      <span className="text-foreground/70">{label}</span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </div>
   );
 }

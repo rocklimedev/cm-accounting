@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -28,8 +28,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 // RTK Query Hooks
@@ -39,92 +40,83 @@ import {
   useUpdateUserMutation,
   useDeleteUserMutation,
 } from "../../api/users.api"; // ← Adjust import path
+import { useGetRolesQuery } from "../../api/rbac.api"; // ← Adjust import path
 
-const PERMISSION_LABELS = {
-  view_all_reports: "View all reports",
-  add_reports: "Add reports",
-  edit_all_reports: "Edit all reports",
-  approve_reports: "Approve reports",
-  reject_reports: "Reject reports",
-  delete_reports: "Delete reports",
-  export_reports: "Export reports",
-  manage_users: "Manage users",
-  manage_permissions: "Manage permissions",
-  view_activity: "View activity",
-  view_others_financials: "View others' financials",
-  manage_cash: "Manage cash opening & adjustments",
+const MODULE_LABELS = {
+  reports: "Reports",
+  users: "Users",
+  roles: "Roles & Permissions",
+  activity: "Activity Log",
+  cash: "Cash Opening & Adjustments",
 };
 
-export default function Users() {
+export default function UsersAndRoles() {
+  return (
+    <Layout title="Users & Permissions">
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="roles">Roles</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users">
+          <UsersTab />
+        </TabsContent>
+
+        <TabsContent value="roles">
+          <RolesTab />
+        </TabsContent>
+      </Tabs>
+    </Layout>
+  );
+}
+
+/* --------------------------------------------------------------------- */
+/* Users tab                                                             */
+/* --------------------------------------------------------------------- */
+
+function UsersTab() {
   const [dialog, setDialog] = useState(null); // null | "create" | "edit"
   const [form, setForm] = useState({});
 
-  // RTK Query
   const {
     data: usersData,
     isLoading: isUsersLoading,
     refetch,
   } = useGetUsersQuery();
+  const { data: rolesData, isLoading: isRolesLoading } = useGetRolesQuery();
+
   const [createUser, { isLoading: isCreating }] = useCreateUserMutation();
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
   const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation();
 
-  const users = usersData?.data || usersData || []; // adjust according to your backend response
+  const users = usersData?.data || usersData || [];
+  const roles = rolesData?.data || rolesData || [];
 
-  // Keep these for now (you can create separate APIs later)
-  const [allPerms, setAllPerms] = useState([]);
-  const [departments, setDepartments] = useState([]);
-
-  React.useEffect(() => {
-    // Fetch permissions and departments
-    const fetchMeta = async () => {
-      try {
-        const [pRes, sRes] = await Promise.all([
-          // api.get("/users/permissions/all"),
-          // api.get("/settings"),
-        ]);
-        // setAllPerms(pRes.data.permissions);
-        // setDepartments(sRes.data.departments || []);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchMeta();
-  }, []);
+  const roleName = (user) =>
+    user.role?.name || roles.find((r) => r.id === user.role_id)?.name || "—";
 
   const openCreate = () => {
     setForm({
       name: "",
       email: "",
       password: "",
-      role: "accountant",
-      department: departments[0] || "Accounts",
-      permissions: ["add_reports"],
+      role_id: roles[0]?.id || "",
       active: true,
     });
     setDialog("create");
   };
 
   const openEdit = (user) => {
-    setForm({ ...user, password: "" });
+    setForm({ ...user, password: "", role_id: user.role_id || user.role?.id });
     setDialog("edit");
-  };
-
-  const togglePerm = (p) => {
-    const perms = form.permissions || [];
-    setForm({
-      ...form,
-      permissions: perms.includes(p)
-        ? perms.filter((x) => x !== p)
-        : [...perms, p],
-    });
   };
 
   const save = async () => {
     try {
       if (dialog === "create") {
-        if (!form.name || !form.email || !form.password) {
-          toast.error("Name, email & password are required");
+        if (!form.name || !form.email || !form.password || !form.role_id) {
+          toast.error("Name, email, password & role are required");
           return;
         }
         await createUser(form).unwrap();
@@ -159,83 +151,68 @@ export default function Users() {
   const isBusy = isCreating || isUpdating || isDeleting;
 
   return (
-    <Layout title="Users & Permissions">
-      <div className="space-y-4">
-        <div className="flex justify-end">
-          <Button onClick={openCreate} data-testid="add-user-button">
-            <Plus className="h-4 w-4 mr-1" /> Add User
-          </Button>
-        </div>
-
-        <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
-          <div className="overflow-x-auto thin-scroll">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Employee ID</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isUsersLoading
-                  ? Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell colSpan={8}>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  : users.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-medium">{u.name}</TableCell>
-                        <TableCell>{u.email}</TableCell>
-                        <TableCell className="capitalize">
-                          {(u.role || "").replace(/_/g, " ")}
-                        </TableCell>
-                        <TableCell>{u.employee_id}</TableCell>
-                        <TableCell>{u.department}</TableCell>
-                        <TableCell className="text-xs text-foreground/60">
-                          {u.role === "super_admin"
-                            ? "All"
-                            : u.role === "admin"
-                              ? "All except users"
-                              : (u.permissions || []).length + " perms"}
-                        </TableCell>
-                        <TableCell>{u.active ? "Yes" : "No"}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 mr-1"
-                            onClick={() => openEdit(u)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 text-destructive border-destructive"
-                            onClick={() => handleDelete(u)}
-                            disabled={isDeleting}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={openCreate} data-testid="add-user-button">
+          <Plus className="h-4 w-4 mr-1" /> Add User
+        </Button>
       </div>
 
-      {/* Dialog */}
+      <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
+        <div className="overflow-x-auto thin-scroll">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isUsersLoading
+                ? Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={5}>
+                        <Skeleton className="h-6 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                : users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">{u.name}</TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell className="capitalize">
+                        {roleName(u)}
+                      </TableCell>
+                      <TableCell>{u.active ? "Yes" : "No"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 mr-1"
+                          onClick={() => openEdit(u)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-destructive border-destructive"
+                          onClick={() => handleDelete(u)}
+                          disabled={isDeleting}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
       <Dialog open={!!dialog} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -245,7 +222,6 @@ export default function Users() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Form fields - same as before */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Name</Label>
@@ -278,32 +254,18 @@ export default function Users() {
               <div className="space-y-1">
                 <Label>Role</Label>
                 <Select
-                  value={form.role}
-                  onValueChange={(v) => setForm({ ...form, role: v })}
+                  value={form.role_id}
+                  onValueChange={(v) => setForm({ ...form, role_id: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue
+                      placeholder={isRolesLoading ? "Loading…" : "Select role"}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="accountant">Accountant</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Department</Label>
-                <Select
-                  value={form.department}
-                  onValueChange={(v) => setForm({ ...form, department: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -318,26 +280,6 @@ export default function Users() {
                 onCheckedChange={(v) => setForm({ ...form, active: v })}
               />
             </div>
-
-            {form.role === "accountant" && (
-              <div className="space-y-2">
-                <Label>Permissions</Label>
-                <div className="grid grid-cols-2 gap-2 border border-border rounded-sm p-3">
-                  {allPerms.map((p) => (
-                    <label
-                      key={p}
-                      className="flex items-center gap-2 text-sm cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={(form.permissions || []).includes(p)}
-                        onCheckedChange={() => togglePerm(p)}
-                      />
-                      {PERMISSION_LABELS[p] || p}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <DialogFooter>
@@ -351,6 +293,129 @@ export default function Users() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------- */
+/* Roles tab                                                             */
+/* --------------------------------------------------------------------- */
+
+function RolesTab() {
+  const [viewRole, setViewRole] = useState(null);
+  const { data: rolesData, isLoading } = useGetRolesQuery();
+  const roles = rolesData?.data || rolesData || [];
+
+  return (
+    <div className="space-y-4">
+      <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
+        <div className="overflow-x-auto thin-scroll">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Role</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead className="text-right">Permissions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading
+                ? Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={4}>
+                        <Skeleton className="h-6 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                : roles.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-foreground/70">
+                        {r.description || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={r.is_active ? "default" : "outline"}>
+                          {r.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewRole(r)}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      <Dialog
+        open={!!viewRole}
+        onOpenChange={(open) => !open && setViewRole(null)}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewRole?.name} — Permissions</DialogTitle>
+          </DialogHeader>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Module</TableHead>
+                <TableHead className="text-center">Create</TableHead>
+                <TableHead className="text-center">Read</TableHead>
+                <TableHead className="text-center">Update</TableHead>
+                <TableHead className="text-center">Delete</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(viewRole?.permissions || []).map((p) => (
+                <TableRow key={p.module}>
+                  <TableCell>{MODULE_LABELS[p.module] || p.module}</TableCell>
+                  <PermCell value={p.can_create} />
+                  <PermCell value={p.can_read} />
+                  <PermCell value={p.can_update} />
+                  <PermCell value={p.can_delete} />
+                </TableRow>
+              ))}
+              {!viewRole?.permissions?.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="text-center text-foreground/60"
+                  >
+                    No permissions configured for this role.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewRole(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function PermCell({ value }) {
+  return (
+    <TableCell className="text-center">
+      {value ? (
+        <Check className="h-4 w-4 text-emerald-600 inline" />
+      ) : (
+        <X className="h-4 w-4 text-foreground/30 inline" />
+      )}
+    </TableCell>
   );
 }

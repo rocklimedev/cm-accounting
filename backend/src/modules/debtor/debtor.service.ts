@@ -8,7 +8,7 @@ import { DebtorEntry } from './models/debtor-entries.model';
 import { CreateDebtorTransactionDto } from './dto/create-debtor-transaction.dto';
 import { CreateDebtorReportDto } from './dto/create-debtor-report.dto';
 import { CreateDebtorEntryDto } from './dto/create-debtor-entry.dto';
-
+import { PaymentMode } from '../bank/models/payment-mode.model';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -23,6 +23,9 @@ export class DebtorService {
     @InjectModel(DebtorEntry)
     private readonly entryModel: typeof DebtorEntry,
 
+    @InjectModel(PaymentMode)
+    private readonly paymentModeModel: typeof PaymentMode,
+
     private readonly auditService: AuditService,
   ) {}
 
@@ -32,10 +35,6 @@ export class DebtorService {
 
   async findAll(customer_name?: string) {
     const where: any = {};
-
-    if (customer_name) {
-      where.customer_name = customer_name;
-    }
 
     return this.transactionModel.findAll({
       where,
@@ -59,17 +58,16 @@ export class DebtorService {
     });
 
     const balance = transactions.reduce((sum, tx) => {
+      const amount = Number(tx.amount);
+
       if (tx.type === 'PAYMENT') {
-        return sum - Number(tx.amount);
+        return sum - amount;
       }
 
-      return sum + Number(tx.amount);
+      return sum + amount;
     }, 0);
 
-    return {
-      customer_name,
-      balance,
-    };
+    return { customer_name, balance };
   }
 
   async createTransaction(dto: CreateDebtorTransactionDto, userId: string) {
@@ -107,17 +105,29 @@ export class DebtorService {
     return report;
   }
 
-  async getReport(reportDate: string) {
+  async getReport(report_date: string) {
     return this.reportModel.findOne({
-      where: { reportDate },
-      include: [DebtorEntry],
+      where: {
+        reportDate: report_date,
+      },
+      include: [
+        {
+          model: DebtorEntry,
+          include: [PaymentMode],
+          required: false,
+        },
+      ],
     });
   }
-
   async getLatestReport() {
-    return this.reportModel.findOne({
-      include: [DebtorEntry],
-      order: [['reportDate', 'DESC']],
+    return this.reportModel.findAll({
+      include: [
+        {
+          model: DebtorEntry,
+          include: [PaymentMode],
+        },
+      ],
+      order: [['report_date', 'DESC']], // ✅ FIXED
     });
   }
 
@@ -126,6 +136,17 @@ export class DebtorService {
   // =====================================
 
   async createEntry(dto: CreateDebtorEntryDto, userId: string) {
+    const paymentMode = await this.paymentModeModel.findOne({
+      where: {
+        id: dto.paymentModeId,
+        is_active: true,
+      },
+    });
+
+    if (!paymentMode) {
+      throw new NotFoundException('Invalid payment mode');
+    }
+
     const entry = await this.entryModel.create(dto as any);
 
     await this.auditService.log({
@@ -144,6 +165,7 @@ export class DebtorService {
       where: {
         debtorReportId: reportId,
       },
+      include: [PaymentMode],
       order: [['id', 'ASC']],
     });
   }
@@ -152,29 +174,40 @@ export class DebtorService {
   // Summary
   // =====================================
 
-  async getReportSummary(reportDate: string) {
+  async getReportSummary(report_date: string) {
     const report = await this.reportModel.findOne({
-      where: { reportDate },
-      include: [DebtorEntry],
+      where: {
+        reportDate: report_date,
+      },
+      include: [
+        {
+          model: DebtorEntry,
+          include: [PaymentMode],
+          required: false,
+        },
+      ],
     });
 
     if (!report) {
       throw new NotFoundException('Debtor report not found');
     }
 
+    const entries = report.entries ?? [];
+
     let newDebtorTotal = 0;
     let receivedTotal = 0;
 
-    for (const entry of report.entries) {
+    for (const entry of entries) {
+      const amount = parseFloat(entry.amount as any) || 0;
+
       if (entry.entryType === 'new_debtor') {
-        newDebtorTotal += Number(entry.amount);
+        newDebtorTotal += amount;
       } else {
-        receivedTotal += Number(entry.amount);
+        receivedTotal += amount;
       }
     }
 
-    const openingAmount = Number(report.openingAmount);
-
+    const openingAmount = parseFloat(report.openingAmount as any) || 0;
     const closingAmount = openingAmount + newDebtorTotal - receivedTotal;
 
     return {

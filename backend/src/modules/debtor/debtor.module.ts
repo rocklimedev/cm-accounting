@@ -4,18 +4,22 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { DebtorTransaction } from './models/debtor-transaction.model';
 import { DebtorReport } from './models/debtor-reports.model';
 import { DebtorEntry } from './models/debtor-entries.model';
-
+import { PaymentMode } from '../bank/models/payment-mode.model';
 import { DebtorService } from './debtor.service';
 import { DebtorController } from './debtor.controller';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([DebtorTransaction, DebtorReport, DebtorEntry]),
+    SequelizeModule.forFeature([
+      DebtorTransaction,
+      DebtorReport,
+      DebtorEntry,
+      PaymentMode, // <-- REQUIRED
+    ]),
     AuditModule,
   ],
-  controllers: [DebtorController],
   providers: [DebtorService],
-  exports: [DebtorService],
+  controllers: [DebtorController],
 })
 export class DebtorModule {}

@@ -6,6 +6,7 @@ import {
   PrimaryKey,
   Default,
   HasMany,
+  Unique,
 } from 'sequelize-typescript';
 import { ExpenseItem } from './expense-item.model';
 
@@ -25,14 +26,25 @@ export class ExpenseReport extends Model<ExpenseReport> {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Column(DataType.DATEONLY)
+  // Expense Number (e.g. EXP-202607-0001)
+  @Unique
+  @Column({
+    type: DataType.STRING(30),
+    allowNull: false,
+  })
+  declare expense_no: string;
+
+  @Column({
+    type: DataType.DATEONLY,
+    allowNull: false,
+  })
   declare report_date: string;
 
   @Default(0)
   @Column(DataType.DECIMAL(18, 2))
   declare total_amount: number;
 
-  // HMAC-SHA256 over canonical record + hash chain link, same scheme as sales_reports.
+  // HMAC-SHA256 over canonical record + hash chain link
   @Column(DataType.STRING(255))
   declare hmac_signature: string;
 
@@ -47,6 +59,9 @@ export class ExpenseReport extends Model<ExpenseReport> {
   @Column(DataType.DATE)
   declare created_at: Date;
 
-  @HasMany(() => ExpenseItem)
+  @HasMany(() => ExpenseItem, {
+    foreignKey: 'expense_report_id',
+    as: 'items',
+  })
   declare items: ExpenseItem[];
 }

@@ -16,6 +16,7 @@ import { DebtorModule } from './modules/debtor/debtor.module';
 import { DailyClosingModule } from './modules/daily-closing/daily-closing.module';
 import { EncryptionKeysModule } from './modules/encryption-keys/encryption-keys.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { PaymentModeModule } from './modules/bank/payment-mode.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -37,6 +38,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
     DailyClosingModule,
     EncryptionKeysModule,
     RbacModule,
+    PaymentModeModule,
   ],
 })
 export class AppModule {}

@@ -1,9 +1,10 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-const BACKEND_URL = "http://localhost:3005"; // Replace with your backend URL
+const BACKEND_URL = "http://localhost:3005/api/v1";
 
 export const debtorApi = createApi({
   reducerPath: "debtorApi",
+
   baseQuery: fetchBaseQuery({
     baseUrl: `${BACKEND_URL}/debtors`,
     prepareHeaders: (headers) => {
@@ -17,47 +18,122 @@ export const debtorApi = createApi({
     },
   }),
 
-  tagTypes: ["Debtor"],
+  tagTypes: ["Debtor", "DebtorReport", "DebtorEntry"],
 
   endpoints: (builder) => ({
-    // GET /debtors
+    // =====================================
+    // TRANSACTIONS
+    // =====================================
+
     getDebtors: builder.query({
       query: (customerName) =>
         customerName
-          ? `?customer_name=${encodeURIComponent(customerName)}`
-          : "",
+          ? `/transactions?customer_name=${encodeURIComponent(customerName)}`
+          : "/transactions",
       providesTags: ["Debtor"],
     }),
 
-    // GET /debtors/:id
     getDebtorById: builder.query({
-      query: (id) => `/${id}`,
+      query: (id) => `/transactions/${id}`,
       providesTags: (result, error, id) => [{ type: "Debtor", id }],
     }),
 
-    // GET /debtors/balance/:customer_name
-    getDebtorBalance: builder.query({
-      query: (customerName) => `/balance/${encodeURIComponent(customerName)}`,
-      providesTags: (result, error, customerName) => [
-        { type: "Debtor", id: customerName },
-      ],
-    }),
-
-    // POST /debtors
     createDebtorTransaction: builder.mutation({
       query: (data) => ({
-        url: "",
+        url: "/transactions",
         method: "POST",
         body: data,
       }),
       invalidatesTags: ["Debtor"],
     }),
+
+    // =====================================
+    // BALANCE
+    // =====================================
+
+    getDebtorBalance: builder.query({
+      query: (customerName) =>
+        `/balance?customer_name=${encodeURIComponent(customerName)}`,
+      providesTags: (result, error, customerName) => [
+        { type: "Debtor", id: customerName },
+      ],
+    }),
+    getDebtorReportByDate: builder.query({
+      query: (reportDate) =>
+        `/reports?reportDate=${encodeURIComponent(reportDate)}`,
+      providesTags: (result, error, reportDate) => [
+        { type: "DebtorReport", id: reportDate },
+      ],
+    }),
+    // =====================================
+    // REPORTS
+    // =====================================
+
+    createDebtorReport: builder.mutation({
+      query: (data) => ({
+        url: "/reports",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["DebtorReport"],
+    }),
+
+    getReports: builder.query({
+      query: (reportDate) =>
+        reportDate
+          ? `/reports?reportDate=${encodeURIComponent(reportDate)}`
+          : "/reports",
+      providesTags: ["DebtorReport"],
+    }),
+
+    getLatestReport: builder.query({
+      query: () => "/reports/latest",
+      providesTags: ["DebtorReport"],
+    }),
+
+    getReportSummary: builder.query({
+      query: (reportDate) =>
+        `/reports/summary?reportDate=${encodeURIComponent(reportDate)}`,
+      providesTags: ["DebtorReport"],
+    }),
+
+    // =====================================
+    // ENTRIES
+    // =====================================
+
+    createDebtorEntry: builder.mutation({
+      query: (data) => ({
+        url: "/entries",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["DebtorEntry", "DebtorReport"],
+    }),
+
+    getEntries: builder.query({
+      query: (reportId) => `/entries/${reportId}`,
+      providesTags: ["DebtorEntry"],
+    }),
   }),
 });
+
+// =====================================
+// EXPORT HOOKS
+// =====================================
 
 export const {
   useGetDebtorsQuery,
   useGetDebtorByIdQuery,
-  useGetDebtorBalanceQuery,
   useCreateDebtorTransactionMutation,
+  useGetDebtorBalanceQuery,
+
+  // ✅ ADD THIS
+  useGetDebtorReportByDateQuery,
+  useCreateDebtorReportMutation,
+  useGetReportsQuery,
+  useGetLatestReportQuery,
+  useGetReportSummaryQuery,
+
+  useCreateDebtorEntryMutation,
+  useGetEntriesQuery,
 } = debtorApi;

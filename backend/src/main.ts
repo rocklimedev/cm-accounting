@@ -8,6 +8,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
+  // Global API Prefix
+  app.setGlobalPrefix('api/v1');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -20,7 +23,8 @@ async function bootstrap() {
 
   const port = config.get<number>('PORT') ?? 3005;
   await app.listen(port);
-  // eslint-disable-next-line no-console
+
   console.log(`ERP API listening on port ${port}`);
 }
+
 bootstrap();

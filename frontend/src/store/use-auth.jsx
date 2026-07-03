@@ -4,6 +4,7 @@ import {
   useCallback,
   createContext,
   useContext,
+  useMemo,
 } from "react";
 import { useLoginMutation, useRegisterMutation } from "../api/auth.api";
 
@@ -38,7 +39,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Login
   const login = useCallback(
     async (email, password) => {
       const { accessToken, user } = await loginMutation({
@@ -56,7 +56,6 @@ export const AuthProvider = ({ children }) => {
     [loginMutation],
   );
 
-  // Register
   const register = useCallback(
     async (payload) => {
       return await registerMutation(payload).unwrap();
@@ -64,12 +63,15 @@ export const AuthProvider = ({ children }) => {
     [registerMutation],
   );
 
-  // Logout
   const logout = useCallback(() => {
     localStorage.removeItem("erp_token");
     localStorage.removeItem("erp_user");
     setUser(null);
   }, []);
+
+  const isAdmin = useMemo(() => {
+    return user?.role?.name?.toLowerCase() === "admin";
+  }, [user]);
 
   return (
     <AuthContext.Provider
@@ -77,6 +79,7 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         isAuthenticated: Boolean(user),
+        isAdmin,
         login,
         register,
         logout,

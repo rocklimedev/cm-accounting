@@ -9,13 +9,7 @@ import {
   BelongsTo,
 } from 'sequelize-typescript';
 import { ExpenseReport } from './expense-report.model';
-
-export enum PaymentMode {
-  CASH = 'CASH',
-  UPI = 'UPI',
-  BANK = 'BANK',
-  CARD = 'CARD',
-}
+import { PaymentMode } from '@/modules/bank/models/payment-mode.model';
 
 @Table({
   tableName: 'expense_items',
@@ -40,8 +34,12 @@ export class ExpenseItem extends Model<ExpenseItem> {
   @Column(DataType.DECIMAL(18, 2))
   declare amount: number;
 
-  @Column(DataType.ENUM(...Object.values(PaymentMode)))
-  declare payment_mode: PaymentMode;
+  @ForeignKey(() => PaymentMode)
+  @Column(DataType.UUID)
+  declare payment_mode_id: string;
+
+  @BelongsTo(() => PaymentMode)
+  declare paymentMode: PaymentMode;
 
   // Encrypted free-text remarks (AES-256-GCM), same scheme as sales_reports.remarks_*
   @Column(DataType.TEXT)

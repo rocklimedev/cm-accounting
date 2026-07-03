@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-const BACKEND_URL = "http://localhost:3005"; // Replace with your backend URL
+const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
 
 export const salesApi = createApi({
   reducerPath: "salesApi",
@@ -28,7 +28,7 @@ export const salesApi = createApi({
     }),
 
     // GET /sales/:id
-    getSalesById: builder.query({
+    getSalesReportById: builder.query({
       query: (id) => `/sales/${id}`,
       providesTags: (result, error, id) => [{ type: "Sales", id }],
     }),
@@ -42,7 +42,18 @@ export const salesApi = createApi({
       }),
       invalidatesTags: ["Sales", "Draft"],
     }),
-
+    updateSalesReport: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/sales/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Sales", id },
+        "Sales",
+        "Draft",
+      ],
+    }),
     // POST /sales/:id/post
     postSalesReport: builder.mutation({
       query: (id) => ({
@@ -62,11 +73,11 @@ export const salesApi = createApi({
     }),
   }),
 });
-
 export const {
   useGetSalesQuery,
-  useGetSalesByIdQuery,
+  useGetSalesReportByIdQuery,
   useCreateSalesReportMutation,
+  useUpdateSalesReportMutation,
   usePostSalesReportMutation,
   useVoidSalesReportMutation,
 } = salesApi;

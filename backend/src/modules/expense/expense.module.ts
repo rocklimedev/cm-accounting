@@ -8,10 +8,16 @@ import { ExpenseService } from './expense.service';
 import { ExpenseController } from './expense.controller';
 
 import { AuditModule } from '../audit/audit.module';
+import { PaymentMode } from '../bank/models/payment-mode.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([ExpenseReport, ExpenseItem, ExpenseTitle]),
+    SequelizeModule.forFeature([
+      ExpenseReport,
+      ExpenseItem,
+      ExpenseTitle,
+      PaymentMode,
+    ]),
     AuditModule,
   ],
   providers: [ExpenseService],

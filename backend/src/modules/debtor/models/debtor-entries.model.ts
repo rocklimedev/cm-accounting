@@ -6,8 +6,12 @@ import {
   PrimaryKey,
   ForeignKey,
   BelongsTo,
+  Default,
+  AllowNull,
 } from 'sequelize-typescript';
+import { v4 as uuidv4 } from 'uuid';
 import { DebtorReport } from './debtor-reports.model';
+import { PaymentMode } from '../../bank/models/payment-mode.model';
 
 @Table({
   tableName: 'debtor_entries',
@@ -15,22 +19,46 @@ import { DebtorReport } from './debtor-reports.model';
 })
 export class DebtorEntry extends Model<DebtorEntry> {
   @PrimaryKey
-  @Column(DataType.UUID)
+  @Default(() => uuidv4())
+  @Column({
+    type: DataType.UUID,
+    field: 'id',
+  })
   declare id: string;
 
+  @AllowNull(true)
   @ForeignKey(() => DebtorReport)
-  @Column(DataType.UUID)
-  debtorReportId: string;
+  @Column({
+    type: DataType.UUID,
+    field: 'debtor_report_id',
+  })
+  declare debtorReportId: string;
 
   @BelongsTo(() => DebtorReport)
-  report: DebtorReport;
+  declare report: DebtorReport;
 
-  @Column(DataType.ENUM('new_debtor', 'debtor_received'))
-  entryType: 'new_debtor' | 'debtor_received';
+  @AllowNull(false)
+  @Column({
+    type: DataType.ENUM('new_debtor', 'debtor_received'),
+    field: 'entry_type',
+  })
+  declare entryType: 'new_debtor' | 'debtor_received';
 
-  @Column(DataType.DECIMAL(18, 2))
-  amount: number;
+  @AllowNull(false)
+  @Column({
+    type: DataType.DECIMAL(18, 2),
+    field: 'amount',
+  })
+  amount: string;
 
-  @Column(DataType.ENUM('cash', 'upi', 'bank', 'card'))
-  paymentMode: 'cash' | 'upi' | 'bank' | 'card';
+  @AllowNull(true)
+  @ForeignKey(() => PaymentMode)
+  @Column({
+    type: DataType.UUID,
+    field: 'payment_mode_id',
+  })
+  declare paymentModeId?: string;
+
+  @BelongsTo(() => PaymentMode)
+  declare paymentMode: PaymentMode;
 }

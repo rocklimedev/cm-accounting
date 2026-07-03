@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { api } from "@/lib/api";
+import { useGetUsersQuery } from "../../api/users.api";
 import { downloadCsv } from "@/lib/reportsApi";
 import { formatMoney, formatDate } from "@/lib/format";
 import { ReportFilters } from "@/components/ReportFilters";
@@ -20,12 +20,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Download } from "lucide-react";
-import { useGetExpensesQuery } from "../../api/expense.api"; // <-- adjust path to wherever expenseApi.js actually lives
-
+import { useGetExpensesQuery } from "../../api/expense.api";
 export default function ExpenseReports() {
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
-  const def = {
+
+  const defaultFilters = {
     search: "",
     timeline: "all",
     status: "all",
@@ -34,75 +34,105 @@ export default function ExpenseReports() {
     min_amount: "",
     max_amount: "",
   };
-  const [filters, setFilters] = useState(def);
-  const [applied, setApplied] = useState(def);
-  const [employees, setEmployees] = useState([]);
 
-  React.useEffect(() => {
-    if (isAdmin)
-      api
-        .get("/users")
-        .then((r) => setEmployees(r.data))
-        .catch(() => {});
-  }, [isAdmin]);
+  const [filters, setFilters] = useState(defaultFilters);
+  const [applied, setApplied] = useState(defaultFilters);
 
-  // RTK Query: getExpenses has no params, so we always fetch the full set
+  // Fetch expense reports (assuming this returns full data with items)
   const {
     data: allRows = [],
     isFetching: loading,
     refetch,
-  } = useGetExpensesQuery();
+  } = useGetExpensesQuery(); // Adjust query name if needed
 
-  // All filtering happens client-side since expenseApi exposes no query params
+  const { data: employees = [] } = useGetUsersQuery(undefined, {
+    skip: !isAdmin,
+  });
+
+  // Client-side filtering
   const rows = useMemo(() => {
     const term = applied.search.trim().toLowerCase();
-    return allRows.filter((r) => {
-      if (
-        term &&
-        !String(r.submitted_by_name || "")
-          .toLowerCase()
-          .includes(term) &&
-        !String(r.report_id || "")
-          .toLowerCase()
-          .includes(term)
-      )
+
+    return allRows.filter((row) => {
+      // Search
+      if (term) {
+        const searchText =
+          `${row.report_id || ""} ${row.submitted_by_name || ""}`.toLowerCase();
+        if (!searchText.includes(term)) return false;
+      }
+
+      // Status filter
+      if (applied.status !== "all" && row.status !== applied.status) {
         return false;
-      if (applied.status !== "all" && r.status !== applied.status) return false;
+      }
+
+      // Submitted By filter
       if (
         applied.submitted_by !== "all" &&
-        String(r.submitted_by) !== String(applied.submitted_by)
-      )
+        String(row.submitted_by) !== String(applied.submitted_by)
+      ) {
         return false;
-      if (
-        applied.payment_mode !== "all" &&
-        !(r.expense_detail || {})[applied.payment_mode] // e.g. "cash"/"upi"/"bank"/"card" > 0
-      )
-        return false;
-      const total = Number(r.expense_detail?.total) || 0;
+      }
+
+      // Payment Mode filter
+      if (applied.payment_mode !== "all") {
+        const hasPaymentMode = row.items?.some(
+          (item) => item.payment_mode?.id === applied.payment_mode,
+        );
+        if (!hasPaymentMode) return false;
+      }
+
+      const total = Number(row.total_amount) || 0;
+
       if (applied.min_amount && total < Number(applied.min_amount))
         return false;
       if (applied.max_amount && total > Number(applied.max_amount))
         return false;
-      if (applied.timeline !== "all") {
-        // adapt this to however ReportFilters encodes timeline (preset key vs date range)
-      }
+
       return true;
     });
   }, [allRows, applied]);
 
+  // Calculate payment mode totals for CSV export
+  const getPaymentModeTotals = (items = []) => {
+    const totals = {};
+    items.forEach((item) => {
+      const modeName = item.payment_mode?.name || "Unknown";
+      totals[modeName] = (totals[modeName] || 0) + Number(item.amount || 0);
+    });
+    return totals;
+  };
+
   const exportCsv = () => {
-    const cols = [
-      { label: "Expense Report ID", get: (r) => r.report_id },
-      { label: "Date", get: (r) => r.report_date },
-      { label: "Submitted By", get: (r) => r.submitted_by_name },
-      { label: "Total Expenses", get: (r) => r.expense_detail?.total },
-      { label: "Cash", get: (r) => r.expense_detail?.cash },
-      { label: "UPI", get: (r) => r.expense_detail?.upi },
-      { label: "Bank", get: (r) => r.expense_detail?.bank },
-      { label: "Card", get: (r) => r.expense_detail?.card },
-      { label: "Status", get: (r) => r.status },
+    const columns = [
+      { label: "Report ID", get: (row) => row.report_id },
+      { label: "Date", get: (row) => row.report_date },
+      { label: "Submitted By", get: (row) => row.submitted_by_name },
+      { label: "Total Amount", get: (row) => row.total_amount },
+      { label: "Status", get: (row) => row.status },
     ];
-    downloadCsv(`chhabra_marble_expenses_${Date.now()}.csv`, rows, cols);
+
+    // Add dynamic payment mode columns
+    const allModes = new Set();
+    rows.forEach((row) => {
+      row.items?.forEach((item) => {
+        if (item.payment_mode?.name) allModes.add(item.payment_mode.name);
+      });
+    });
+
+    allModes.forEach((modeName) => {
+      columns.push({
+        label: modeName,
+        get: (row) => {
+          const total = row.items
+            ?.filter((i) => i.payment_mode?.name === modeName)
+            .reduce((sum, i) => sum + Number(i.amount || 0), 0);
+          return total || 0;
+        },
+      });
+    });
+
+    downloadCsv(`expense_reports_${Date.now()}.csv`, rows, columns);
   };
 
   return (
@@ -113,105 +143,83 @@ export default function ExpenseReports() {
           setFilters={setFilters}
           onApply={() => setApplied(filters)}
           onReset={() => {
-            setFilters(def);
-            setApplied(def);
+            setFilters(defaultFilters);
+            setApplied(defaultFilters);
           }}
           employees={isAdmin ? employees : []}
           showType={false}
           showPaymentMode
         />
+
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-border">
             <div className="text-sm text-foreground/70">
               {rows.length} expense report{rows.length !== 1 ? "s" : ""}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportCsv}
-              data-testid="expense-export-button"
-            >
-              <Download className="h-4 w-4 mr-1" /> Export CSV
+
+            <Button variant="outline" size="sm" onClick={exportCsv}>
+              <Download className="h-4 w-4 mr-1" />
+              Export CSV
             </Button>
           </div>
-          <div
-            className="overflow-x-auto thin-scroll"
-            data-testid="reports-table"
-          >
+
+          <div className="overflow-x-auto thin-scroll">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Submitted By</TableHead>
-                  <TableHead className="text-right">Total Expenses</TableHead>
-                  <TableHead className="text-right">Cash</TableHead>
-                  <TableHead className="text-right">UPI</TableHead>
-                  <TableHead className="text-right">Bank</TableHead>
-                  <TableHead className="text-right">Card</TableHead>
+                  <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
+                  Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={10}>
-                        <Skeleton className="h-6 w-full" />
+                      <TableCell colSpan={6}>
+                        <Skeleton className="h-8 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
-                      className="text-center text-sm text-foreground/50 py-12"
+                      colSpan={6}
+                      className="text-center py-12 text-muted-foreground"
                     >
-                      No expense reports found
+                      No expense reports found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((r) => {
-                    const d = r.expense_detail || {};
-                    return (
-                      <TableRow
-                        key={r.report_id}
-                        className="cursor-pointer hover:bg-secondary/70"
-                        onClick={() => navigate(`/reports/${r.report_id}`)}
+                  rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer hover:bg-secondary/70"
+                      onClick={() => navigate(`/reports/expense/${row.id}`)}
+                    >
+                      <TableCell className="font-medium">
+                        {row.expense_no}
+                      </TableCell>
+                      <TableCell>{formatDate(row.report_date)}</TableCell>
+                      <TableCell>{row.submitted_by_name || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">
+                        {formatMoney(row.total_amount)}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={row.status} />
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <TableCell className="font-medium">
-                          {r.report_id}
-                        </TableCell>
-                        <TableCell>{formatDate(r.report_date)}</TableCell>
-                        <TableCell>{r.submitted_by_name}</TableCell>
-                        <TableCell className="text-right tabular-nums font-semibold">
-                          {formatMoney(d.total)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(d.cash)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(d.upi)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(d.bank)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(d.card)}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={r.status} />
-                        </TableCell>
-                        <TableCell
-                          className="text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ReportActionMenu report={r} onChanged={refetch} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                        <ReportActionMenu report={row} onChanged={refetch} />
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>

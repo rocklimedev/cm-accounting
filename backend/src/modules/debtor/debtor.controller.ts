@@ -6,6 +6,7 @@ import {
   Post,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { DebtorService } from './debtor.service';
@@ -20,8 +21,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.ACCOUNTANT)
+@UseGuards(JwtAuthGuard)
 @Controller('debtors')
 export class DebtorController {
   constructor(private readonly debtorService: DebtorService) {}
@@ -31,8 +31,8 @@ export class DebtorController {
   // =====================================
 
   @Get('transactions')
-  findAllTransactions(@Query('customer_name') customer_name?: string) {
-    return this.debtorService.findAll(customer_name);
+  findAllTransactions() {
+    return this.debtorService.findAll();
   }
 
   @Get('transactions/:id')
@@ -40,8 +40,13 @@ export class DebtorController {
     return this.debtorService.findOne(id);
   }
 
-  @Get('balance/:customer_name')
-  getBalance(@Param('customer_name') customer_name: string) {
+  // safer version of balance endpoint
+  @Get('balance')
+  getBalance(@Query('customer_name') customer_name: string) {
+    if (!customer_name) {
+      throw new BadRequestException('customer_name is required');
+    }
+
     return this.debtorService.getBalance(customer_name);
   }
 
@@ -71,13 +76,21 @@ export class DebtorController {
   }
 
   @Get('reports')
-  getReport(@Query('date') date: string) {
-    return this.debtorService.getReport(date);
+  getReport(@Query('reportDate') reportDate: string) {
+    if (!reportDate) {
+      throw new BadRequestException('reportDate is required');
+    }
+
+    return this.debtorService.getReport(reportDate);
   }
 
   @Get('reports/summary')
-  getReportSummary(@Query('date') date: string) {
-    return this.debtorService.getReportSummary(date);
+  getReportSummary(@Query('reportDate') reportDate: string) {
+    if (!reportDate) {
+      throw new BadRequestException('reportDate is required');
+    }
+
+    return this.debtorService.getReportSummary(reportDate);
   }
 
   // =====================================

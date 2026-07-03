@@ -11,7 +11,9 @@ import { CreateExpenseReportDto } from './dto/create-expense-report.dto';
 import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
 import { ExpenseTitle } from './models/expense-titles.model';
+import { DocumentNumberHelper } from '@/common/helper/document-number.helper';
 import { CreateExpenseTitleDto } from './dto/create-expense-title.dto';
+import { PaymentMode } from '../bank/models/payment-mode.model';
 @Injectable()
 export class ExpenseService {
   constructor(
@@ -24,37 +26,73 @@ export class ExpenseService {
     @InjectModel(ExpenseTitle)
     private titleModel: typeof ExpenseTitle,
 
+    @InjectModel(PaymentMode)
+    private paymentModeModel: typeof PaymentMode,
+
     private sequelize: Sequelize,
     private crypto: CryptoService,
     private auditService: AuditService,
   ) {}
-
   async findAll() {
     const reports = await this.reportModel.findAll({
-      include: [ExpenseItem],
+      include: [
+        {
+          model: ExpenseItem,
+          include: [PaymentMode],
+        },
+      ],
       order: [['report_date', 'DESC']],
     });
+
     return reports.map((r) => this.toSafeJson(r));
   }
 
   async findOne(id: string) {
     const report = await this.reportModel.findByPk(id, {
-      include: [ExpenseItem],
+      include: [
+        {
+          model: ExpenseItem,
+          include: [PaymentMode],
+        },
+      ],
     });
-    if (!report) throw new NotFoundException('Expense report not found');
+
+    if (!report) {
+      throw new NotFoundException('Expense report not found');
+    }
+
     return this.toSafeJson(report);
   }
-
   private toSafeJson(report: ExpenseReport) {
     const json: any = report.toJSON();
+
     json.items = (json.items ?? []).map((item: any) => {
       const remarks = this.crypto.decrypt({
         cipher: item.remarks_cipher,
         iv: item.remarks_iv,
         tag: item.remarks_tag,
       });
-      const { remarks_cipher, remarks_iv, remarks_tag, ...rest } = item;
-      return { ...rest, remarks };
+
+      const {
+        remarks_cipher,
+        remarks_iv,
+        remarks_tag,
+        payment_mode_id,
+        paymentMode,
+        ...rest
+      } = item;
+
+      return {
+        ...rest,
+        payment_mode: paymentMode
+          ? {
+              id: paymentMode.id,
+              code: paymentMode.code,
+              name: paymentMode.name,
+            }
+          : null,
+        remarks,
+      };
     });
 
     const verified = json.hmac_signature
@@ -68,16 +106,44 @@ export class ExpenseService {
         )
       : null;
 
-    return { ...json, integrity_verified: verified };
+    return {
+      ...json,
+      integrity_verified: verified,
+    };
   }
 
   async create(dto: CreateExpenseReportDto, userId: string) {
     const total_amount = dto.items.reduce((sum, i) => sum + i.amount, 0);
 
+    // Generate Expense Number
+    const expenseNo = await DocumentNumberHelper.generate(
+      this.reportModel,
+      'expense_no',
+      'EXP',
+    );
+
+    // Validate payment modes
+    const paymentModeIds = [
+      ...new Set(dto.items.map((i) => i.payment_mode_id)),
+    ];
+
+    const paymentModes = await this.paymentModeModel.findAll({
+      where: {
+        id: paymentModeIds,
+        is_active: true,
+      },
+    });
+
+    if (paymentModes.length !== paymentModeIds.length) {
+      throw new BadRequestException('One or more payment modes are invalid.');
+    }
+
+    // Get last posted report for chaining
     const lastPosted = await this.reportModel.findOne({
       where: { status: ReportStatus.POSTED },
       order: [['created_at', 'DESC']],
     });
+
     const previous_hash = this.crypto.chainHash(
       lastPosted?.previous_hash ?? null,
       {
@@ -87,15 +153,18 @@ export class ExpenseService {
       },
     );
 
+    // HMAC signature
     const hmac_signature = this.crypto.sign({
       report_date: dto.report_date,
       total_amount,
       previous_hash,
     });
 
+    // Transaction block
     const result = await this.sequelize.transaction(async (t) => {
       const report = await this.reportModel.create(
         {
+          expense_no: expenseNo, // ✅ ADDED
           report_date: dto.report_date,
           total_amount,
           hmac_signature,
@@ -115,7 +184,7 @@ export class ExpenseService {
             expense_report_id: report.id,
             expense_title: item.expense_title,
             amount: item.amount,
-            payment_mode: item.payment_mode,
+            payment_mode_id: item.payment_mode_id,
             remarks_cipher: encrypted.cipher,
             remarks_iv: encrypted.iv,
             remarks_tag: encrypted.tag,
@@ -127,21 +196,23 @@ export class ExpenseService {
       return report;
     });
 
+    // Audit log
     await this.auditService.log({
       userId,
       action: 'CREATE',
       tableName: 'expense_reports',
       recordId: result.id,
       newValue: {
+        expense_no: expenseNo,
         report_date: dto.report_date,
         total_amount,
         item_count: dto.items.length,
       },
     });
 
+    // Return full enriched response
     return this.findOne(result.id);
   }
-
   async post(id: string, userId: string) {
     const report = await this.reportModel.findByPk(id);
     if (!report) throw new NotFoundException('Expense report not found');

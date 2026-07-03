@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { api } from "@/lib/api";
 import { formatMoney, todayStr } from "@/lib/format";
 import { Field, RupeeInput, TextAreaField } from "@/components/FormFields";
 import { Card } from "@/components/ui/card";
@@ -24,7 +23,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Plus,
   Trash2,
   Loader2,
   AlertTriangle,
@@ -35,32 +33,58 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const PAY_MODES = [
-  { k: "cash", l: "Cash" },
-  { k: "upi", l: "UPI" },
-  { k: "bank", l: "Bank" },
-  { k: "card", l: "Card" },
-];
-const newRow = (type) =>
+import {
+  useGetLatestReportQuery,
+  useGetDebtorReportByDateQuery,
+  useCreateDebtorReportMutation,
+} from "../../api/debtor.api";
+import { useCreateDebtorEntryMutation } from "../../api/debtor.api";
+import { useGetActivePaymentModesQuery } from "../../api/payment-mode.api";
+
+const newRow = (type, defaultPaymentModeId) =>
   type === "debtor_received"
-    ? { entry_type: "debtor_received", amount: "", payment_mode: "cash" }
+    ? {
+        entry_type: "debtor_received",
+        amount: "",
+        payment_mode_id: defaultPaymentModeId || "",
+      }
     : { entry_type: "new_debtor", amount: "" };
-const blank = () => ({
+
+const blank = (defaultPaymentModeId) => ({
   report_date: todayStr(),
-  entries: [newRow("new_debtor")],
+  entries: [newRow("new_debtor", defaultPaymentModeId)],
   employee_remarks: "",
 });
-const n = (v) => Number(v || 0);
-
+const n = (v) => parseFloat(v || "0");
 export default function DebtorReportForm() {
   const { user, isAdmin } = useAuth();
-  const { reportId } = useParams();
+  // Backend keys reports by date, not an arbitrary id — route param is the date
+  // for edit mode (e.g. /reports/debtor/:reportDate)
+  const { reportDate: routeReportDate } = useParams();
   const navigate = useNavigate();
-  const isEdit = !!reportId;
+  const isEdit = !!routeReportDate;
   const storageKey = "debtor_draft_new";
 
+  const { data: paymentModes = [], isLoading: modesLoading } =
+    useGetActivePaymentModesQuery();
+
+  const { data: latestReport } = useGetLatestReportQuery(undefined, {
+    skip: isEdit, // only need "latest" to seed opening balance for a new report
+  });
+
+  const {
+    data: existingReport,
+    isLoading: reportLoading,
+    isError: reportError,
+  } = useGetDebtorReportByDateQuery(routeReportDate, { skip: !isEdit });
+
+  const [createReport] = useCreateDebtorReportMutation();
+  const [createEntry] = useCreateDebtorEntryMutation();
+
+  const defaultModeId = paymentModes[0]?.id;
+
   const [form, setForm] = useState(() => {
-    if (!reportId) {
+    if (!isEdit) {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
@@ -78,41 +102,51 @@ export default function DebtorReportForm() {
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editReason, setEditReason] = useState("");
-  const [loaded, setLoaded] = useState(!isEdit);
 
   const adminEditing = isEdit && isAdmin && reportStatus !== "draft";
 
+  // seed default payment mode once modes load, for any row missing one
   useEffect(() => {
-    api
-      .get("/debtor-reports/outstanding")
-      .then((r) => setOutstanding(r.data.outstanding_debtor || 0))
-      .catch(() => {});
-    if (isEdit) {
-      api
-        .get(`/debtor-reports/${reportId}`)
-        .then((res) => {
-          const d = res.data;
-          setReportStatus(d.status || "draft");
-          setForm({
-            report_date: (d.report_date || todayStr()).slice(0, 10),
-            entries: (d.entries && d.entries.length
-              ? d.entries
-              : [newRow("new_debtor")]
-            ).map((e) => ({
-              entry_type: e.entry_type,
-              amount: e.amount ?? "",
-              payment_mode: e.payment_mode || "cash",
-            })),
-            employee_remarks: d.employee_remarks || "",
-          });
-          // opening = closing - net of this report
-          if (d.running) setOutstanding(d.running.opening || 0);
-        })
-        .catch(() => toast.error("Failed to load report"))
-        .finally(() => setLoaded(true));
+    if (!defaultModeId) return;
+
+    setForm((f) => ({
+      ...f,
+      entries: f.entries.map((e) =>
+        e.entry_type === "debtor_received" && !e.payment_mode_id
+          ? { ...e, payment_mode_id: defaultModeId }
+          : e,
+      ),
+    }));
+  }, [defaultModeId]);
+  // opening balance for a NEW report = latest report's closing amount
+  useEffect(() => {
+    if (!isEdit && latestReport) {
+      setOutstanding(Number(latestReport.closingAmount || 0));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId]);
+  }, [isEdit, latestReport]);
+
+  // load an existing report for edit
+  useEffect(() => {
+    if (!isEdit || !existingReport) return;
+    if (!defaultModeId) return;
+    setReportStatus(existingReport.status || "draft");
+    setOutstanding(parseFloat(existingReport.openingAmount || "0"));
+    setForm({
+      report_date: (existingReport.reportDate || todayStr()).slice(0, 10),
+      entries: (existingReport.entries?.length
+        ? existingReport.entries
+        : [newRow("new_debtor", defaultModeId)]
+      ).map((e) => ({
+        entry_type: e.entryType, // OK
+        amount: e.amount ?? "",
+        payment_mode_id: e.paymentModeId || defaultModeId || "",
+      })),
+    });
+  }, [isEdit, existingReport, defaultModeId]);
+
+  useEffect(() => {
+    if (isEdit || reportError) toast.error("Failed to load report");
+  }, [isEdit, reportError]);
 
   useEffect(() => {
     if (!isEdit) localStorage.setItem(storageKey, JSON.stringify(form));
@@ -125,7 +159,10 @@ export default function DebtorReportForm() {
       return { ...f, entries: rows };
     });
   const addRow = (type) =>
-    setForm((f) => ({ ...f, entries: [...f.entries, newRow(type)] }));
+    setForm((f) => ({
+      ...f,
+      entries: [...f.entries, newRow(type, defaultModeId)],
+    }));
   const removeRow = (i) =>
     setForm((f) => ({
       ...f,
@@ -150,8 +187,12 @@ export default function DebtorReportForm() {
     const e = {};
     if (!form.report_date) e.report_date = "Report date is required";
     if (!form.entries.length) e.entries = "Add at least one entry";
+
     form.entries.forEach((en, i) => {
       if (n(en.amount) <= 0) e[`amt_${i}`] = "Amount must be greater than zero";
+
+      if (en.entry_type === "debtor_received" && !en.payment_mode_id)
+        e[`mode_${i}`] = "Select a payment mode";
     });
     if (overReceived)
       e.received =
@@ -162,22 +203,6 @@ export default function DebtorReportForm() {
     return Object.keys(e).length === 0;
   };
 
-  const buildPayload = (status) => ({
-    report_date: form.report_date,
-    entries: form.entries.map((e) =>
-      e.entry_type === "debtor_received"
-        ? {
-            entry_type: "debtor_received",
-            amount: n(e.amount),
-            payment_mode: e.payment_mode,
-          }
-        : { entry_type: "new_debtor", amount: n(e.amount) },
-    ),
-    employee_remarks: form.employee_remarks,
-    status,
-    ...(adminEditing ? { edit_reason: editReason } : {}),
-  });
-
   const save = async (status) => {
     if (status === "submitted" && !validate()) {
       toast.error("Please fix the highlighted fields");
@@ -185,10 +210,28 @@ export default function DebtorReportForm() {
     }
     setSaving(true);
     try {
-      const payload = buildPayload(status);
-      const res = isEdit
-        ? await api.put(`/debtor-reports/${reportId}`, payload)
-        : await api.post("/debtor-reports", payload);
+      // 1. create/update the report shell
+      const report = await createReport({
+        reportDate: form.report_date,
+
+        status,
+        ...(adminEditing ? { editReason } : {}),
+      }).unwrap();
+      // 2. create each entry against the new report id
+      await Promise.all(
+        form.entries.map((e) =>
+          createEntry({
+            debtorReportId: report.id,
+            entryType: e.entry_type,
+            amount: n(e.amount),
+            paymentModeId:
+              e.entry_type === "debtor_received"
+                ? (e.payment_mode_id ?? null)
+                : null,
+          }).unwrap(),
+        ),
+      );
+
       localStorage.removeItem(storageKey);
       toast.success(
         status === "submitted"
@@ -197,28 +240,28 @@ export default function DebtorReportForm() {
             ? "Report updated"
             : "Draft saved",
       );
-      navigate(`/reports/${res.data.report_id}`);
+      navigate(`/reports/debtor/${report.reportDate}`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save report");
+      toast.error(err?.data?.detail || "Failed to save report");
     } finally {
       setSaving(false);
       setConfirmOpen(false);
     }
   };
 
-  if (!loaded)
+  if (isEdit && reportLoading)
     return (
       <Layout title="Debtor Report">
         <div className="text-sm text-foreground/50">Loading...</div>
       </Layout>
     );
-  const nowTime = new Date().toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
   return (
-    <Layout title={isEdit ? `Edit Debtor Report ${reportId}` : "Debtor Report"}>
+    <Layout
+      title={
+        isEdit ? `Edit Debtor Report ${form.report_date}` : "Debtor Report"
+      }
+    >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <Section title="Basic Information">
@@ -328,23 +371,35 @@ export default function DebtorReportForm() {
                           Payment Mode
                         </label>
                         <Select
-                          value={en.payment_mode}
-                          onValueChange={(v) => setEntry(i, "payment_mode", v)}
+                          value={en.payment_mode_id}
+                          onValueChange={(v) =>
+                            setEntry(i, "payment_mode_id", v)
+                          }
+                          disabled={modesLoading}
                         >
                           <SelectTrigger
                             className="h-9 w-36"
                             data-testid={`entry-mode-${i}`}
                           >
-                            <SelectValue />
+                            <SelectValue
+                              placeholder={
+                                modesLoading ? "Loading..." : "Select"
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
-                            {PAY_MODES.map((m) => (
-                              <SelectItem key={m.k} value={m.k}>
-                                {m.l}
+                            {paymentModes.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        {errors[`mode_${i}`] && (
+                          <div className="text-xs text-primary">
+                            {errors[`mode_${i}`]}
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="ml-auto">
@@ -364,8 +419,7 @@ export default function DebtorReportForm() {
                   </div>
                   {en.entry_type === "new_debtor" && (
                     <div className="text-xs text-foreground/55 mt-2">
-                      No payment received \u2014 increases Outstanding Debtor
-                      only.
+                      No payment received — increases Outstanding Debtor only.
                     </div>
                   )}
                 </div>

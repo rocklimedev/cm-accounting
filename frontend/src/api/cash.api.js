@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-const BACKEND_URL = "http://localhost:3005"; // Replace with your backend URL
+const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
 
 export const cashApi = createApi({
   reducerPath: "cashApi",

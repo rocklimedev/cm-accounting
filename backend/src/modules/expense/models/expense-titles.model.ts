@@ -21,9 +21,13 @@ export class ExpenseTitle extends Model<ExpenseTitle> {
     unique: true,
     allowNull: false,
   })
-  title: string;
+  declare title: string;
 
   @Default(true)
-  @Column(DataType.BOOLEAN)
-  isActive: boolean;
+  @Column({
+    type: DataType.BOOLEAN,
+    field: 'is_active', // <-- maps property to DB column
+    allowNull: false,
+  })
+  declare isActive: boolean;
 }

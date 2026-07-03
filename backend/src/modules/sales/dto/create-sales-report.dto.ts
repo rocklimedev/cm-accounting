@@ -1,4 +1,25 @@
-import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+class SalesReportItemDto {
+  @IsUUID()
+  @IsNotEmpty()
+  payment_mode_id: string;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+}
 
 export class CreateSalesReportDto {
   @IsDateString()
@@ -8,32 +29,13 @@ export class CreateSalesReportDto {
   @Min(0)
   gross_amount: number;
 
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  cash_amount?: number;
+  @IsArray()
+  @IsNotEmpty({ message: 'At least one payment item is required' })
+  @ValidateNested({ each: true })
+  @Type(() => SalesReportItemDto)
+  items: SalesReportItemDto[];
 
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  upi_amount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  bank_amount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  card_amount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  debtor_amount?: number;
-
-  // Plaintext remarks — encrypted server-side before storage, never persisted as-is.
+  // Plaintext remarks — will be encrypted server-side
   @IsOptional()
   @IsString()
   remarks?: string;

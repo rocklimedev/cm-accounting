@@ -1,5 +1,5 @@
-import { IsEnum, IsNumber, IsString, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsEnum, IsNumber, IsUUID } from 'class-validator';
 
 export class CreateDebtorEntryDto {
   @IsUUID()
@@ -12,6 +12,6 @@ export class CreateDebtorEntryDto {
   @IsNumber()
   amount: number;
 
-  @IsEnum(['cash', 'upi', 'bank', 'card'])
-  paymentMode: 'cash' | 'upi' | 'bank' | 'card';
+  @IsUUID()
+  paymentModeId: string;
 }

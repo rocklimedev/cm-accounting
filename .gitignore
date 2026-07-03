@@ -1,2 +1,4 @@
 .env
 .env.example
+.github/deploy_key
+.github/deploy_key.pub

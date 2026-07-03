@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-const BACKEND_URL = "http://localhost:3005"; // Replace with your backend URL
+const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
 
 export const expenseApi = createApi({
   reducerPath: "expenseApi",
@@ -18,7 +18,7 @@ export const expenseApi = createApi({
     },
   }),
 
-  tagTypes: ["Expense", "Draft"],
+  tagTypes: ["Expense", "ExpenseTitle", "Draft"],
 
   endpoints: (builder) => ({
     // GET /expenses
@@ -33,23 +33,27 @@ export const expenseApi = createApi({
       providesTags: (result, error, id) => [{ type: "Expense", id }],
     }),
 
-    // POST /expenses
+    // POST /expenses  — always creates as DRAFT (per ExpenseService.create)
     createExpense: builder.mutation({
       query: (data) => ({
         url: "/expenses",
         method: "POST",
-        body: data,
+        body: data, // { report_date, items: [{ expense_title, amount, payment_mode }] }
       }),
       invalidatesTags: ["Expense"],
     }),
 
-    // POST /expenses/:id/post
+    // POST /expenses/:id/post — DRAFT -> POSTED
     postExpense: builder.mutation({
       query: (id) => ({
         url: `/expenses/${id}/post`,
         method: "POST",
       }),
-      invalidatesTags: ["Expense", "Draft"],
+      invalidatesTags: (result, error, id) => [
+        "Expense",
+        "Draft",
+        { type: "Expense", id },
+      ],
     }),
 
     // POST /expenses/:id/void
@@ -58,7 +62,18 @@ export const expenseApi = createApi({
         url: `/expenses/${id}/void`,
         method: "POST",
       }),
-      invalidatesTags: ["Expense", "Draft"],
+      invalidatesTags: (result, error, id) => [
+        "Expense",
+        "Draft",
+        { type: "Expense", id },
+      ],
+    }),
+
+    // GET /expenses/titles — matches ExpenseService.getExpenseTitles()
+    // Adjust the path here if your controller mounts it elsewhere.
+    getExpenseTitles: builder.query({
+      query: () => "/expenses/titles",
+      providesTags: ["ExpenseTitle"],
     }),
 
     // GET /drafts — cross-report-type list (expense, debtor, retail, etc.)
@@ -76,5 +91,6 @@ export const {
   useCreateExpenseMutation,
   usePostExpenseMutation,
   useVoidExpenseMutation,
+  useGetExpenseTitlesQuery,
   useGetDraftReportsQuery,
 } = expenseApi;

@@ -2,13 +2,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { api } from "@/lib/api";
+import {
+  useGetSalesReportByIdQuery,
+  useCreateSalesReportMutation,
+  usePostSalesReportMutation,
+} from "../../api/sales.api";
+import { useGetActivePaymentModesQuery } from "../../api/payment-mode.api";
 import { formatMoney, todayStr } from "@/lib/format";
 import { Field, RupeeInput, TextAreaField } from "@/components/FormFields";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -19,19 +23,18 @@ import {
 import { Loader2, AlertTriangle, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 
-const MODES = [
-  { k: "cash", l: "Cash" },
-  { k: "upi", l: "UPI" },
-  { k: "bank", l: "Bank" },
-  { k: "card", l: "Card" },
-];
-const blank = () => ({
+const DEBTOR_MODE_CODE = "DEBTOR";
+
+const n = (v) => Number(v || 0);
+
+const blankRetail = (modes) => Object.fromEntries(modes.map((m) => [m.k, ""]));
+
+const blank = (modes) => ({
   report_date: todayStr(),
-  retail: { cash: "", upi: "", bank: "", card: "" },
+  retail: blankRetail(modes),
   gross_amount: "",
   employee_remarks: "",
 });
-const n = (v) => Number(v || 0);
 
 export default function SalesReportForm() {
   const { user, isAdmin } = useAuth();
@@ -40,141 +43,203 @@ export default function SalesReportForm() {
   const isEdit = !!reportId;
   const storageKey = "sales_draft_new_v2";
 
-  const [form, setForm] = useState(() => {
-    if (!reportId) {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          return { ...blank(), ...JSON.parse(saved) };
-        } catch {
-          /* noop */
-        }
+  // Fetch Active Payment Modes
+  const { data: paymentModesRaw = [], isLoading: modesLoading } =
+    useGetActivePaymentModesQuery();
+
+  // Transform modes — keep `id` since the backend keys items by
+  // payment_mode_id (UUID FK), not by code.
+  const MODES = useMemo(() => {
+    return paymentModesRaw
+      .filter((pm) => pm.is_active)
+      .map((pm) => ({
+        id: pm.id,
+        k: pm.code,
+        l: pm.name,
+      }));
+  }, [paymentModesRaw]);
+
+  const debtorMode = useMemo(
+    () => MODES.find((m) => m.k?.toUpperCase() === DEBTOR_MODE_CODE),
+    [MODES],
+  );
+
+  const {
+    data: reportData,
+    isFetching: reportLoading,
+    isError: reportError,
+  } = useGetSalesReportByIdQuery(reportId, { skip: !isEdit });
+
+  const [createSalesReport, { isLoading: creating }] =
+    useCreateSalesReportMutation();
+  const [postSalesReport, { isLoading: posting }] =
+    usePostSalesReportMutation();
+
+  const saving = creating || posting;
+
+  const [form, setForm] = useState(null);
+  const [reportStatus, setReportStatus] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Backend enum values are uppercase: 'DRAFT' | 'POSTED' | 'VOID'.
+  const isPosted = reportStatus === "POSTED";
+  const isVoid = reportStatus === "VOID";
+  const readOnly = isEdit && (isPosted || isVoid);
+
+  // Initialize Form
+  useEffect(() => {
+    if (modesLoading || MODES.length === 0) return;
+
+    if (isEdit && reportData) {
+      setReportStatus(reportData.status || "DRAFT");
+      setForm({
+        report_date: (reportData.report_date || todayStr()).slice(0, 10),
+        gross_amount: reportData.gross_amount ?? "",
+
+        retail: Object.fromEntries(
+          MODES.map((m) => {
+            const item = (reportData.items || []).find(
+              (it) => it.payment_mode_id === m.id,
+            );
+            return [m.k, item ? String(item.amount) : ""];
+          }),
+        ),
+        employee_remarks: reportData.remarks || "",
+      });
+    } else if (!isEdit && !form) {
+      // Restore an in-progress unsaved draft if one exists.
+      try {
+        const saved = localStorage.getItem(storageKey);
+        setForm(saved ? JSON.parse(saved) : blank(MODES));
+      } catch {
+        setForm(blank(MODES));
       }
     }
-    return blank();
-  });
-  const [reportStatus, setReportStatus] = useState("draft");
-  const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [editReason, setEditReason] = useState("");
-  const [loaded, setLoaded] = useState(!isEdit);
-
-  const adminEditing = isEdit && isAdmin && reportStatus !== "draft";
+  }, [modesLoading, MODES, isEdit, reportData, form]);
 
   useEffect(() => {
-    if (isEdit) {
-      api
-        .get(`/sales-reports/${reportId}`)
-        .then((res) => {
-          const d = res.data;
-          setReportStatus(d.status || "draft");
-          setForm({
-            report_date: (d.report_date || todayStr()).slice(0, 10),
-            gross_amount: d.gross_amount ?? "",
-            retail: {
-              cash: d.retail?.cash ?? "",
-              upi: d.retail?.upi ?? "",
-              bank: d.retail?.bank ?? "",
-              card: d.retail?.card ?? "",
-            },
-            employee_remarks: d.employee_remarks || "",
-          });
-        })
-        .catch(() => toast.error("Failed to load report"))
-        .finally(() => setLoaded(true));
+    if (reportError) toast.error("Failed to load report");
+  }, [reportError]);
+
+  useEffect(() => {
+    if (!isEdit && form) {
+      localStorage.setItem(storageKey, JSON.stringify(form));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId]);
-
-  useEffect(() => {
-    if (!isEdit) localStorage.setItem(storageKey, JSON.stringify(form));
   }, [form, isEdit]);
 
   const setRetail = (k, v) =>
     setForm((f) => ({ ...f, retail: { ...f.retail, [k]: v } }));
 
   const calc = useMemo(() => {
-    const totalRetail = MODES.reduce((a, m) => a + n(form.retail[m.k]), 0);
+    if (!form) return { totalRetail: 0, debtor: 0 };
+    const totalRetail = MODES.filter((m) => m.k !== DEBTOR_MODE_CODE).reduce(
+      (a, m) => a + n(form.retail[m.k]),
+      0,
+    );
     const debtor = n(form.gross_amount) - totalRetail;
     return { totalRetail, debtor };
-  }, [form]);
+  }, [form, MODES]);
 
-  const retailExceeds = calc.totalRetail > n(form.gross_amount);
+  const retailExceeds = form ? calc.totalRetail > n(form.gross_amount) : false;
+  const hasUnreconciledDebtor = calc.debtor > 0 && !debtorMode;
 
   const validate = () => {
     const e = {};
-    if (!form.report_date) e.report_date = "Report date is required";
-    if (n(form.gross_amount) <= 0)
+    if (!form?.report_date) e.report_date = "Report date is required";
+    if (n(form?.gross_amount) <= 0)
       e.gross_amount = "Gross Amount must be greater than zero";
     if (retailExceeds) e.retail = "Total Retail cannot exceed Gross Amount";
-    if (adminEditing && !editReason.trim())
-      e.edit_reason = "A reason is required to edit a submitted report.";
+    if (hasUnreconciledDebtor)
+      e.retail =
+        `Outstanding debtor amount of ${formatMoney(calc.debtor)} can't ` +
+        `be recorded — no "${DEBTOR_MODE_CODE}" payment mode is configured, ` +
+        "and the backend requires payment amounts to add up to the full gross amount.";
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const buildPayload = (status) => ({
-    report_date: form.report_date,
-    gross_amount: n(form.gross_amount),
-    retail: {
-      cash: n(form.retail.cash),
-      upi: n(form.retail.upi),
-      bank: n(form.retail.bank),
-      card: n(form.retail.card),
-    },
-    employee_remarks: form.employee_remarks,
-    status,
-    ...(adminEditing ? { edit_reason: editReason } : {}),
-  });
+  // Build payload matching CreateSalesReportDto exactly:
+  // { report_date, gross_amount, remarks?, items: [{ payment_mode_id, amount }] }
+  const buildPayload = () => {
+    const items = MODES.filter((m) => m.k !== DEBTOR_MODE_CODE)
+      .map((m) => ({
+        payment_mode_id: m.id,
+        amount: n(form.retail[m.k]),
+      }))
+      .filter((item) => item.amount > 0);
 
-  const save = async (status) => {
-    if (status === "submitted" && !validate()) {
+    if (debtorMode && calc.debtor > 0) {
+      items.push({
+        payment_mode_id: debtorMode.id,
+        amount: calc.debtor,
+      });
+    }
+
+    return {
+      report_date: form.report_date,
+      gross_amount: n(form.gross_amount),
+      remarks: form.employee_remarks || undefined,
+      items,
+    };
+  };
+
+  const save = async (finalize) => {
+    if (finalize && !validate()) {
       toast.error("Please fix the highlighted fields");
       return;
     }
-    if (retailExceeds) {
-      toast.error("Total Retail cannot exceed Gross Amount");
+    if (retailExceeds || hasUnreconciledDebtor) {
+      toast.error("Please fix the highlighted fields");
       return;
     }
-    setSaving(true);
+
     try {
-      const payload = buildPayload(status);
-      const res = isEdit
-        ? await api.put(`/sales-reports/${reportId}`, payload)
-        : await api.post("/sales-reports", payload);
+      const payload = buildPayload();
+      const created = await createSalesReport(payload).unwrap();
+
+      if (finalize) {
+        await postSalesReport({ id: created.id }).unwrap();
+      }
+
       localStorage.removeItem(storageKey);
-      toast.success(
-        status === "submitted"
-          ? "Sales report submitted"
-          : isEdit
-            ? "Report updated"
-            : "Draft saved",
-      );
-      navigate(`/reports/${res.data.report_id}`);
+      toast.success(finalize ? "Sales report submitted" : "Draft saved");
+      navigate(`/reports/${created.id}`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save report");
+      const message = Array.isArray(err?.data?.message)
+        ? err.data.message.join(", ")
+        : err?.data?.message || "Failed to save report";
+      toast.error(message);
     } finally {
-      setSaving(false);
       setConfirmOpen(false);
     }
   };
 
-  if (!loaded)
+  if (modesLoading || (isEdit && reportLoading) || !form) {
     return (
       <Layout title="Sales Report">
         <div className="text-sm text-foreground/50">Loading...</div>
       </Layout>
     );
+  }
+
   const nowTime = new Date().toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
   });
 
   return (
-    <Layout
-      title={isEdit ? `Edit Sales Report ${reportId}` : "Daily Sales Report"}
-    >
+    <Layout title={isEdit ? `Sales Report ${reportId}` : "Daily Sales Report"}>
+      {readOnly && (
+        <div className="mb-4 rounded-sm border border-primary/40 bg-primary/5 px-3 py-2 text-sm flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          This report is {isPosted ? "posted" : "void"} and can no longer be
+          edited — it's part of the signed audit chain. To correct it, void it
+          {isPosted ? "" : " (already void)"} and create a new report instead.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <Section title="Basic Information">
@@ -184,26 +249,14 @@ export default function SalesReportForm() {
                   type="date"
                   data-testid="field-report-date"
                   value={form.report_date}
+                  disabled={readOnly}
                   onChange={(e) =>
                     setForm({ ...form, report_date: e.target.value })
                   }
                   className={errors.report_date ? "border-primary" : ""}
                 />
               </Field>
-              <Field label="Submitted By">
-                <Input
-                  value={user?.name || ""}
-                  disabled
-                  data-testid="field-submitted-by"
-                />
-              </Field>
-              <Field label="Employee ID">
-                <Input
-                  value={user?.employee_id || ""}
-                  disabled
-                  data-testid="field-employee-id"
-                />
-              </Field>
+
               <Field label="Time">
                 <Input value={nowTime} disabled data-testid="field-time" />
               </Field>
@@ -221,6 +274,7 @@ export default function SalesReportForm() {
                 onChange={(v) => setForm({ ...form, gross_amount: v })}
                 testId="field-gross-amount"
                 error={errors.gross_amount}
+                disabled={readOnly}
               />
             </Field>
           </Section>
@@ -231,12 +285,13 @@ export default function SalesReportForm() {
               not exceed Gross Amount.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {MODES.map((m) => (
+              {MODES.filter((m) => m.k !== DEBTOR_MODE_CODE).map((m) => (
                 <Field key={m.k} label={`${m.l} Retail`}>
                   <RupeeInput
                     value={form.retail[m.k]}
                     onChange={(v) => setRetail(m.k, v)}
                     testId={`field-retail-${m.k}`}
+                    disabled={readOnly}
                   />
                 </Field>
               ))}
@@ -262,7 +317,11 @@ export default function SalesReportForm() {
 
           <Section title="Debtor">
             <div
-              className={`flex items-center justify-between rounded-sm px-3 py-3 border ${retailExceeds ? "border-primary bg-primary/5" : "border-border bg-secondary/50"}`}
+              className={`flex items-center justify-between rounded-sm px-3 py-3 border ${
+                retailExceeds || hasUnreconciledDebtor
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-secondary/50"
+              }`}
             >
               <div>
                 <div className="text-sm font-medium">
@@ -280,8 +339,8 @@ export default function SalesReportForm() {
               </span>
             </div>
             <p className="text-xs text-foreground/55 mt-2">
-              This amount becomes new Outstanding Debtor on submission. It is
-              not added to cash or realised sales until received.
+              This amount is recorded as an outstanding debtor line item on
+              submission.
             </p>
           </Section>
 
@@ -292,26 +351,9 @@ export default function SalesReportForm() {
               onChange={(v) => setForm({ ...form, employee_remarks: v })}
               testId="field-employee-remarks"
               placeholder="Optional notes about today's sale"
+              disabled={readOnly}
             />
           </Section>
-
-          {adminEditing && (
-            <Section title="Reason for Edit (required)">
-              <Textarea
-                value={editReason}
-                onChange={(e) => setEditReason(e.target.value)}
-                rows={2}
-                placeholder="Explain why this submitted report is being edited"
-                data-testid="field-edit-reason"
-                className={errors.edit_reason ? "border-primary" : ""}
-              />
-              {errors.edit_reason && (
-                <div className="text-xs text-primary mt-1">
-                  {errors.edit_reason}
-                </div>
-              )}
-            </Section>
-          )}
         </div>
 
         <div className="lg:col-span-1">
@@ -329,25 +371,26 @@ export default function SalesReportForm() {
               <SumRow
                 label="Debtor"
                 value={formatMoney(Math.max(0, calc.debtor))}
-                warn={retailExceeds}
+                warn={retailExceeds || hasUnreconciledDebtor}
               />
             </Card>
-            <div className="flex flex-col gap-2">
-              <Button
-                onClick={() => {
-                  if (validate()) setConfirmOpen(true);
-                  else toast.error("Please fix the highlighted fields");
-                }}
-                disabled={saving}
-                data-testid="sales-report-submit-button"
-              >
-                <Send className="h-4 w-4 mr-2" />{" "}
-                {adminEditing ? "Save Changes" : "Preview & Submit"}
-              </Button>
-              {!adminEditing && (
+
+            {!readOnly && (
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => {
+                    if (validate()) setConfirmOpen(true);
+                    else toast.error("Please fix the highlighted fields");
+                  }}
+                  disabled={saving}
+                  data-testid="sales-report-submit-button"
+                >
+                  <Send className="h-4 w-4 mr-2" /> Preview & Submit
+                </Button>
+
                 <Button
                   variant="outline"
-                  onClick={() => save("draft")}
+                  onClick={() => save(false)}
                   disabled={saving}
                   data-testid="sales-report-save-draft-button"
                 >
@@ -358,15 +401,16 @@ export default function SalesReportForm() {
                   )}{" "}
                   Save as Draft
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => navigate(-1)}
-                data-testid="sales-report-cancel-button"
-              >
-                Cancel
-              </Button>
-            </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                  data-testid="sales-report-cancel-button"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -374,9 +418,7 @@ export default function SalesReportForm() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {adminEditing ? "Confirm Changes" : "Confirm Submission"}
-            </DialogTitle>
+            <DialogTitle>Confirm Submission</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 text-sm">
             <SumRow label="Report Date" value={form.report_date} />
@@ -402,12 +444,12 @@ export default function SalesReportForm() {
               Back
             </Button>
             <Button
-              onClick={() => save(adminEditing ? reportStatus : "submitted")}
+              onClick={() => save(true)}
               disabled={saving}
               data-testid="confirm-submit-button"
             >
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}{" "}
-              {adminEditing ? "Save Changes" : "Submit Report"}
+              Submit Report
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -426,6 +468,7 @@ function Section({ title, children }) {
     </Card>
   );
 }
+
 function SumRow({ label, value, warn }) {
   return (
     <div className="flex items-center justify-between py-1">
