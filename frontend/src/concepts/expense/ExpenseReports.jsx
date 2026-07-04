@@ -199,7 +199,7 @@ export default function ExpenseReports() {
                     <TableRow
                       key={row.id}
                       className="cursor-pointer hover:bg-secondary/70"
-                      onClick={() => navigate(`/reports/expense/${row.id}`)}
+                      onClick={() => navigate(`/expense-reports/${row.id}`)}
                     >
                       <TableCell className="font-medium">
                         {row.expense_no}

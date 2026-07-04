@@ -47,7 +47,12 @@ export function ReportActionMenu({ report, onChanged }) {
       : report.report_type === "debtor"
         ? `/debtor-reports/${rid}/edit`
         : `/expense-reports/${rid}/edit`;
-
+  const viewPath =
+    report.report_type === "sales"
+      ? `/sales-reports/${rid}`
+      : report.report_type === "debtor"
+        ? `/debtor-reports/${rid}`
+        : `/expense-reports/${rid}`;
   const remarkBase =
     report.report_type === "sales"
       ? "sales-reports"
@@ -108,7 +113,7 @@ export function ReportActionMenu({ report, onChanged }) {
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            onClick={() => navigate(`/reports/${rid}`)}
+            onClick={() => navigate(viewPath)}
             data-testid={`action-view-${rid}`}
           >
             <Eye className="h-4 w-4 mr-2" /> View Details

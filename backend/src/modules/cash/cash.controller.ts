@@ -20,8 +20,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.ACCOUNTANT)
+@UseGuards(JwtAuthGuard)
 @Controller('cash')
 export class CashController {
   constructor(private readonly cashService: CashService) {}

@@ -269,7 +269,9 @@ export default function DebtorReports() {
                     <TableRow
                       key={row.report_id}
                       className="cursor-pointer hover:bg-secondary/70"
-                      onClick={() => navigate(`/reports/${row.report_id}`)}
+                      onClick={() =>
+                        navigate(`/debtor-reports/${row.report_id}`)
+                      }
                     >
                       <TableCell className="font-medium">
                         {row.report_id}

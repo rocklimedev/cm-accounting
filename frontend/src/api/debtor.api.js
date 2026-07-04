@@ -58,13 +58,13 @@ export const debtorApi = createApi({
         { type: "Debtor", id: customerName },
       ],
     }),
-    getDebtorReportByDate: builder.query({
-      query: (reportDate) =>
-        `/reports?reportDate=${encodeURIComponent(reportDate)}`,
-      providesTags: (result, error, reportDate) => [
-        { type: "DebtorReport", id: reportDate },
+    getDebtorReport: builder.query({
+      query: (reportId) => `/report/${reportId}`,
+      providesTags: (result, error, reportId) => [
+        { type: "DebtorReport", id: reportId },
       ],
     }),
+
     // =====================================
     // REPORTS
     // =====================================
@@ -96,7 +96,14 @@ export const debtorApi = createApi({
         `/reports/summary?reportDate=${encodeURIComponent(reportDate)}`,
       providesTags: ["DebtorReport"],
     }),
+    // =====================================
+    // OUTSTANDING DEBTOR
+    // =====================================
 
+    getOutstandingDebtorAmount: builder.query({
+      query: () => "/outstanding-debtor",
+      providesTags: ["Debtor"],
+    }),
     // =====================================
     // ENTRIES
     // =====================================
@@ -128,12 +135,12 @@ export const {
   useGetDebtorBalanceQuery,
 
   // ✅ ADD THIS
-  useGetDebtorReportByDateQuery,
+  useGetDebtorReportQuery,
   useCreateDebtorReportMutation,
   useGetReportsQuery,
   useGetLatestReportQuery,
   useGetReportSummaryQuery,
-
+  useGetOutstandingDebtorAmountQuery, // ✅ Add this
   useCreateDebtorEntryMutation,
   useGetEntriesQuery,
 } = debtorApi;

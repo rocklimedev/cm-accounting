@@ -56,8 +56,7 @@ export default function ExpenseReportForm() {
   const { reportId } = useParams();
   const navigate = useNavigate();
   const isEdit = !!reportId;
-  const storageKey = "expense_draft_new_v3";
-  console.log(user);
+
   const [form, setForm] = useState({
     report_date: todayStr(),
     expenses: [newRow()],
@@ -102,20 +101,7 @@ export default function ExpenseReportForm() {
   useEffect(() => {
     if (isEdit || titlesLoading || paymentModesLoading) return;
     const defaultPayMode = paymentModeOptions[0]?.k || "";
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const hasData =
-          parsed.expenses && parsed.expenses.some((r) => Number(r.amount) > 0);
-        if (hasData) {
-          setForm({ report_date: todayStr(), ...parsed });
-          return;
-        }
-      } catch {
-        /* ignore corrupt draft */
-      }
-    }
+
     setForm({
       report_date: todayStr(),
       expenses: rowsFromTitles(titles, defaultPayMode),
@@ -128,10 +114,6 @@ export default function ExpenseReportForm() {
     titles.join("|"),
     paymentModeOptions.map((m) => m.k).join("|"),
   ]);
-
-  useEffect(() => {
-    if (!isEdit) localStorage.setItem(storageKey, JSON.stringify(form));
-  }, [form, isEdit]);
 
   useEffect(() => {
     if (reportError) toast.error("Failed to load report");
@@ -206,7 +188,7 @@ export default function ExpenseReportForm() {
   const saveDraft = async () => {
     try {
       const created = await createExpense(buildPayload()).unwrap();
-      localStorage.removeItem(storageKey);
+
       toast.success("Draft saved");
       navigate(`/reports/${created.id}`);
     } catch (err) {
@@ -218,7 +200,7 @@ export default function ExpenseReportForm() {
     try {
       const created = await createExpense(buildPayload()).unwrap();
       await postExpense(created.id).unwrap();
-      localStorage.removeItem(storageKey);
+
       toast.success("Expense report submitted");
       navigate(`/reports/${created.id}`);
     } catch (err) {

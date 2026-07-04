@@ -21,7 +21,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 @Controller('debtors')
 export class DebtorController {
   constructor(private readonly debtorService: DebtorService) {}
@@ -75,15 +75,10 @@ export class DebtorController {
     return this.debtorService.getLatestReport();
   }
 
-  @Get('reports')
-  getReport(@Query('reportDate') reportDate: string) {
-    if (!reportDate) {
-      throw new BadRequestException('reportDate is required');
-    }
-
-    return this.debtorService.getReport(reportDate);
+  @Get('report/:reportId')
+  getReport(@Param('reportId') reportId: string) {
+    return this.debtorService.getReport(reportId);
   }
-
   @Get('reports/summary')
   getReportSummary(@Query('reportDate') reportDate: string) {
     if (!reportDate) {
@@ -92,7 +87,10 @@ export class DebtorController {
 
     return this.debtorService.getReportSummary(reportDate);
   }
-
+  @Get('outstanding-debtor')
+  getOutstandingDebtorAmount() {
+    return this.debtorService.getOutstandingDebtorAmount();
+  }
   // =====================================
   // Entries
   // =====================================

@@ -32,11 +32,10 @@ import {
   ArrowDownToLine,
 } from "lucide-react";
 import { toast } from "sonner";
-
 import {
   useGetLatestReportQuery,
-  useGetDebtorReportByDateQuery,
   useCreateDebtorReportMutation,
+  useGetOutstandingDebtorAmountQuery,
 } from "../../api/debtor.api";
 import { useCreateDebtorEntryMutation } from "../../api/debtor.api";
 import { useGetActivePaymentModesQuery } from "../../api/payment-mode.api";
@@ -63,20 +62,16 @@ export default function DebtorReportForm() {
   const { reportDate: routeReportDate } = useParams();
   const navigate = useNavigate();
   const isEdit = !!routeReportDate;
-  const storageKey = "debtor_draft_new";
 
   const { data: paymentModes = [], isLoading: modesLoading } =
     useGetActivePaymentModesQuery();
 
-  const { data: latestReport } = useGetLatestReportQuery(undefined, {
-    skip: isEdit, // only need "latest" to seed opening balance for a new report
-  });
-
-  const {
-    data: existingReport,
-    isLoading: reportLoading,
-    isError: reportError,
-  } = useGetDebtorReportByDateQuery(routeReportDate, { skip: !isEdit });
+  const { data: outstandingData } = useGetOutstandingDebtorAmountQuery(
+    undefined,
+    {
+      skip: isEdit,
+    },
+  );
 
   const [createReport] = useCreateDebtorReportMutation();
   const [createEntry] = useCreateDebtorEntryMutation();
@@ -85,14 +80,6 @@ export default function DebtorReportForm() {
 
   const [form, setForm] = useState(() => {
     if (!isEdit) {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          return { ...blank(), ...JSON.parse(saved) };
-        } catch {
-          /* noop */
-        }
-      }
     }
     return blank();
   });
@@ -120,37 +107,14 @@ export default function DebtorReportForm() {
   }, [defaultModeId]);
   // opening balance for a NEW report = latest report's closing amount
   useEffect(() => {
-    if (!isEdit && latestReport) {
-      setOutstanding(Number(latestReport.closingAmount || 0));
+    if (!isEdit && outstandingData) {
+      setOutstanding(Number(outstandingData.totalOutstanding || 0));
     }
-  }, [isEdit, latestReport]);
-
-  // load an existing report for edit
-  useEffect(() => {
-    if (!isEdit || !existingReport) return;
-    if (!defaultModeId) return;
-    setReportStatus(existingReport.status || "draft");
-    setOutstanding(parseFloat(existingReport.openingAmount || "0"));
-    setForm({
-      report_date: (existingReport.reportDate || todayStr()).slice(0, 10),
-      entries: (existingReport.entries?.length
-        ? existingReport.entries
-        : [newRow("new_debtor", defaultModeId)]
-      ).map((e) => ({
-        entry_type: e.entryType, // OK
-        amount: e.amount ?? "",
-        payment_mode_id: e.paymentModeId || defaultModeId || "",
-      })),
-    });
-  }, [isEdit, existingReport, defaultModeId]);
+  }, [isEdit, outstandingData]);
 
   useEffect(() => {
     if (isEdit || reportError) toast.error("Failed to load report");
   }, [isEdit, reportError]);
-
-  useEffect(() => {
-    if (!isEdit) localStorage.setItem(storageKey, JSON.stringify(form));
-  }, [form, isEdit]);
 
   const setEntry = (i, key, val) =>
     setForm((f) => {
@@ -225,14 +189,13 @@ export default function DebtorReportForm() {
             entryType: e.entry_type,
             amount: n(e.amount),
             paymentModeId:
-              e.entry_type === "debtor_received"
-                ? (e.payment_mode_id ?? null)
+              e.entry_type === "debtor_received" && e.payment_mode_id
+                ? e.payment_mode_id
                 : null,
           }).unwrap(),
         ),
       );
 
-      localStorage.removeItem(storageKey);
       toast.success(
         status === "submitted"
           ? "Debtor report submitted"
@@ -277,20 +240,7 @@ export default function DebtorReportForm() {
                   className={errors.report_date ? "border-primary" : ""}
                 />
               </Field>
-              <Field label="Submitted By">
-                <Input
-                  value={user?.name || ""}
-                  disabled
-                  data-testid="field-submitted-by"
-                />
-              </Field>
-              <Field label="Employee ID">
-                <Input
-                  value={user?.employee_id || ""}
-                  disabled
-                  data-testid="field-employee-id"
-                />
-              </Field>
+
               <Field label="Current Outstanding Debtor">
                 <Input
                   value={formatMoney(calc.opening)}

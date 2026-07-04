@@ -20,25 +20,36 @@ export class CashAdjustment extends Model<CashAdjustment> {
   declare id: string;
 
   @Column({
+    field: 'adjustment_date',
     type: DataType.DATEONLY,
     allowNull: false,
   })
   declare adjustmentDate: string;
 
-  @Column(DataType.ENUM('add', 'reduce'))
+  @Column({
+    field: 'type',
+    type: DataType.ENUM('add', 'reduce'),
+  })
   declare type: 'add' | 'reduce';
 
-  @Column(DataType.DECIMAL(18, 2))
+  @Column({
+    field: 'amount',
+    type: DataType.DECIMAL(18, 2),
+  })
   declare amount: number;
 
   @Column({
+    field: 'reason',
     type: DataType.TEXT,
     allowNull: false,
   })
   declare reason: string;
 
   @ForeignKey(() => User)
-  @Column(DataType.UUID)
+  @Column({
+    field: 'added_by',
+    type: DataType.UUID,
+  })
   declare addedBy: string;
 
   @BelongsTo(() => User)
@@ -46,8 +57,8 @@ export class CashAdjustment extends Model<CashAdjustment> {
 
   @CreatedAt
   @Column({
-    type: DataType.DATE,
     field: 'created_at',
+    type: DataType.DATE,
   })
   declare createdAt: Date;
 }

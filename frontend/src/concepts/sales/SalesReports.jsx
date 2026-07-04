@@ -201,7 +201,7 @@ export default function SalesReports() {
                     <TableRow
                       key={report.report_id}
                       className="cursor-pointer hover:bg-secondary/70"
-                      onClick={() => navigate(`/reports/${report.report_id}`)}
+                      onClick={() => navigate(`/sales-reports/${report.id}`)}
                     >
                       <TableCell className="font-medium">
                         {report.sales_no}

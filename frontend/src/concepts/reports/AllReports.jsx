@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { useGetReportsQuery } from "../../api/reports.api"; // ← Adjust path
+import { useGetReportsQuery } from "../../api/reports.api";
 import { useGetUsersQuery } from "../../api/users.api";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 import { ReportFilters } from "@/components/ReportFilters";
@@ -29,17 +29,22 @@ import {
 import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
-const TYPE_LABEL = { sales: "Sales", debtor: "Debtor", expense: "Expense" };
+const TYPE_LABEL = {
+  sales: "Sales",
+  expense: "Expense",
+  debtor: "Debtor",
+};
 
 export default function AllReports() {
-  const { isAdmin } = useAuth();
   const navigate = useNavigate();
-  const [sp] = useSearchParams();
+  const { isAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
 
-  const initialQ = sp.get("q") || "";
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const [filters, setFilters] = useState({
-    search: initialQ,
+    search: searchParams.get("q") || "",
     report_type: "all",
     timeline: "all",
     status: "all",
@@ -49,15 +54,8 @@ export default function AllReports() {
   });
 
   const [appliedFilters, setAppliedFilters] = useState(filters);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
 
-  // RTK Query
-  const {
-    data: reportsData,
-    isLoading,
-    refetch,
-  } = useGetReportsQuery({
+  const { data, isLoading, refetch } = useGetReportsQuery({
     ...appliedFilters,
     page,
     page_size: pageSize,
@@ -71,8 +69,8 @@ export default function AllReports() {
 
   const employees = usersData?.data || usersData || [];
 
-  const rows = reportsData?.rows || [];
-  const total = reportsData?.total || 0;
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const applyFilters = () => {
@@ -81,7 +79,7 @@ export default function AllReports() {
   };
 
   const resetFilters = () => {
-    const defaultFilters = {
+    const defaults = {
       search: "",
       report_type: "all",
       timeline: "all",
@@ -90,30 +88,36 @@ export default function AllReports() {
       min_amount: "",
       max_amount: "",
     };
-    setFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
+
+    setFilters(defaults);
+    setAppliedFilters(defaults);
     setPage(1);
   };
 
-  // Export Excel
-  const exportXlsx = async () => {
+  const exportXlsx = () => {
     try {
-      // You can also use a simple URL method like before
       const token = localStorage.getItem("erp_token");
+
       const params = new URLSearchParams({
         token,
-        report_type: appliedFilters.report_type || "all",
-        timeline: appliedFilters.timeline || "all",
-        submitted_by: appliedFilters.submitted_by || "all",
+        report_type: appliedFilters.report_type,
+        timeline: appliedFilters.timeline,
+        status: appliedFilters.status,
+        submitted_by: appliedFilters.submitted_by,
+        min_amount: appliedFilters.min_amount,
+        max_amount: appliedFilters.max_amount,
       });
 
       window.open(
-        `${import.meta.env.VITE_API_URL || "http://localhost:3005"}/export/reports/excel?${params}`,
+        `${
+          import.meta.env.VITE_API_URL || "http://localhost:3005"
+        }/export/reports/excel?${params}`,
         "_blank",
       );
+
       toast.success("Export started");
-    } catch (err) {
-      toast.error("Failed to start export");
+    } catch {
+      toast.error("Failed to export");
     }
   };
 
@@ -128,42 +132,41 @@ export default function AllReports() {
           employees={isAdmin ? employees : []}
         />
 
-        <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-border">
-            <div className="text-sm text-foreground/70">
-              {total} report{total !== 1 ? "s" : ""}
+        <Card className="border rounded-md overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b">
+            <div className="text-sm text-muted-foreground">
+              {total} report{total !== 1 && "s"}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2">
               <Select
                 value={String(pageSize)}
-                onValueChange={(v) => {
-                  setPageSize(Number(v));
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="h-8 w-28">
+                <SelectTrigger className="w-28 h-8">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
-                  {[10, 20, 50, 100].map((num) => (
-                    <SelectItem key={num} value={String(num)}>
-                      {num} / page
+                  {[10, 20, 50, 100].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n} / page
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
               <Button variant="outline" size="sm" onClick={exportXlsx}>
-                <Download className="h-4 w-4 mr-1" /> Export Excel
+                <Download className="mr-1 h-4 w-4" />
+                Export Excel
               </Button>
             </div>
           </div>
 
-          <div
-            className="overflow-x-auto thin-scroll"
-            data-testid="reports-table"
-          >
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -178,6 +181,7 @@ export default function AllReports() {
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 6 }).map((_, i) => (
@@ -191,38 +195,40 @@ export default function AllReports() {
                   <TableRow>
                     <TableCell
                       colSpan={9}
-                      className="text-center text-sm text-foreground/50 py-12"
+                      className="text-center py-10 text-muted-foreground"
                     >
-                      No reports found. Adjust filters or create a new report.
+                      No reports found.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rows.map((r) => (
                     <TableRow
                       key={r.report_id}
-                      className="cursor-pointer hover:bg-secondary/70"
+                      className="cursor-pointer"
                       onClick={() => navigate(`/reports/${r.report_id}`)}
                     >
                       <TableCell className="font-medium">
                         {r.report_id}
                       </TableCell>
+
                       <TableCell>{formatDate(r.report_date)}</TableCell>
-                      <TableCell>
-                        {TYPE_LABEL[r.report_type] || r.report_type}
-                      </TableCell>
-                      <TableCell>{r.submitted_by_name}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">
+
+                      <TableCell>{TYPE_LABEL[r.report_type]}</TableCell>
+
+                      <TableCell>{r.submitted_by_name || "-"}</TableCell>
+
+                      <TableCell className="text-right font-semibold">
                         {formatMoney(r.main_amount)}
                       </TableCell>
-                      <TableCell className="text-xs">
-                        {formatDateTime(r.submitted_at)}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {formatDateTime(r.updated_at)}
-                      </TableCell>
+
+                      <TableCell>{formatDateTime(r.submitted_at)}</TableCell>
+
+                      <TableCell>{formatDateTime(r.updated_at)}</TableCell>
+
                       <TableCell>
                         <StatusBadge status={r.status} />
                       </TableCell>
+
                       <TableCell
                         className="text-right"
                         onClick={(e) => e.stopPropagation()}
@@ -236,27 +242,30 @@ export default function AllReports() {
             </Table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between p-3 border-t border-border">
-            <span className="text-xs text-foreground/60">
+          <div className="flex items-center justify-between p-3 border-t">
+            <span className="text-xs text-muted-foreground">
               Page {page} of {totalPages}
             </span>
-            <div className="flex items-center gap-2">
+
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
               >
-                <ChevronLeft className="h-4 w-4" /> Prev
+                <ChevronLeft className="h-4 w-4" />
+                Prev
               </Button>
+
               <Button
                 variant="outline"
                 size="sm"
                 disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
+                onClick={() => setPage((p) => p + 1)}
               >
-                Next <ChevronRight className="h-4 w-4" />
+                Next
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>

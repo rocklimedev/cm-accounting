@@ -1,49 +1,58 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
+const BACKEND_URL = "http://localhost:3005/api/v1";
 
 export const reportsApi = createApi({
   reducerPath: "reportsApi",
+
   baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}`,
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem("erp_token");
+
       if (token) {
         headers.set("Authorization", `Bearer ${token}`);
       }
+
       return headers;
     },
   }),
 
-  tagTypes: ["Report"],
+  tagTypes: ["Report", "Dashboard"],
 
   endpoints: (builder) => ({
-    // GET reports with filters & pagination
+    // ---------------- Reports ----------------
+
     getReports: builder.query({
-      query: (params) => {
-        const searchParams = new URLSearchParams();
-
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined && value !== "" && value !== "all") {
-            searchParams.append(key, String(value));
-          }
-        });
-
-        return `/reports?${searchParams.toString()}`;
-      },
+      query: (params = {}) => ({
+        url: "/reports",
+        method: "GET",
+        params,
+      }),
       providesTags: ["Report"],
     }),
 
-    // Export Excel
-    exportReportsExcel: builder.mutation({
-      query: (params) => ({
-        url: "/export/reports/excel",
+    getReport: builder.query({
+      query: ({ id, type }) => ({
+        url: `/reports/${id}`,
         method: "GET",
-        params, // RTK Query will append as query string
-        responseHandler: (response) => response.blob(), // for file download
+        params: { type },
       }),
+      providesTags: (_result, _error, { id }) => [{ type: "Report", id }],
+    }),
+
+    // ---------------- Dashboard ----------------
+
+    getDashboard: builder.query({
+      query: (params = {}) => ({
+        url: "/reports/dashboard",
+        method: "GET",
+        params,
+      }),
+      providesTags: ["Dashboard"],
     }),
   }),
 });
 
-export const { useGetReportsQuery, useExportReportsExcelMutation } = reportsApi;
+export const { useGetReportsQuery, useGetReportQuery, useGetDashboardQuery } =
+  reportsApi;

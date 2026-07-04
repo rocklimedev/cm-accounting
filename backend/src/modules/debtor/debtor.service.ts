@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 
 import { DebtorTransaction } from './models/debtor-transaction.model';
@@ -105,11 +109,8 @@ export class DebtorService {
     return report;
   }
 
-  async getReport(report_date: string) {
-    return this.reportModel.findOne({
-      where: {
-        reportDate: report_date,
-      },
+  async getReport(reportId: string) {
+    return this.reportModel.findByPk(reportId, {
       include: [
         {
           model: DebtorEntry,
@@ -136,15 +137,27 @@ export class DebtorService {
   // =====================================
 
   async createEntry(dto: CreateDebtorEntryDto, userId: string) {
-    const paymentMode = await this.paymentModeModel.findOne({
-      where: {
-        id: dto.paymentModeId,
-        is_active: true,
-      },
-    });
+    // Only validate payment mode for "debtor_received"
+    if (dto.entryType === 'debtor_received') {
+      if (!dto.paymentModeId) {
+        throw new BadRequestException(
+          'Payment mode is required for debtor_received entries',
+        );
+      }
 
-    if (!paymentMode) {
-      throw new NotFoundException('Invalid payment mode');
+      const paymentMode = await this.paymentModeModel.findOne({
+        where: {
+          id: dto.paymentModeId,
+          is_active: true,
+        },
+      });
+
+      if (!paymentMode) {
+        throw new NotFoundException('Invalid or inactive payment mode');
+      }
+    } else {
+      // For new_debtor, ensure paymentModeId is null
+      dto.paymentModeId = null;
     }
 
     const entry = await this.entryModel.create(dto as any);
@@ -159,7 +172,32 @@ export class DebtorService {
 
     return entry;
   }
+  // =====================================
+  // Global Outstanding Balance
+  // =====================================
 
+  /**
+   * Calculates the global outstanding debtor amount across the entire system
+   * based on the latest calculated report closing ledger.
+   */
+  async getOutstandingDebtorAmount(): Promise<{ totalOutstanding: number }> {
+    const entries = await this.entryModel.findAll();
+
+    const totalOutstanding = entries.reduce((sum, entry) => {
+      const amount = parseFloat(entry.amount) || 0;
+
+      // 'new_debtor' increments outstanding debt, 'debtor_received' decrements it
+      if (entry.entryType === 'new_debtor') {
+        return sum + amount;
+      } else if (entry.entryType === 'debtor_received') {
+        return sum - amount;
+      }
+
+      return sum;
+    }, 0);
+
+    return { totalOutstanding };
+  }
   async getEntries(reportId: string) {
     return this.entryModel.findAll({
       where: {

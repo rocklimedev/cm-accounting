@@ -8,6 +8,7 @@ import {
   usePostSalesReportMutation,
 } from "../../api/sales.api";
 import { useGetActivePaymentModesQuery } from "../../api/payment-mode.api";
+import { useGetOutstandingDebtorAmountQuery } from "../../api/debtor.api";
 import { formatMoney, todayStr } from "@/lib/format";
 import { Field, RupeeInput, TextAreaField } from "@/components/FormFields";
 import { Card } from "@/components/ui/card";
@@ -46,7 +47,15 @@ export default function SalesReportForm() {
   // Fetch Active Payment Modes
   const { data: paymentModesRaw = [], isLoading: modesLoading } =
     useGetActivePaymentModesQuery();
+  const {
+    data: outstandingDebtorRaw,
+    isLoading: outstandingLoading,
+    isError: outstandingError,
+  } = useGetOutstandingDebtorAmountQuery();
 
+  // Response shape from /outstanding-debtor isn't pinned down yet —
+  // this unwraps whichever field your API actually returns.
+  const outstandingDebtorAmount = n(outstandingDebtorRaw?.totalOutstanding);
   // Transform modes — keep `id` since the backend keys items by
   // payment_mode_id (UUID FK), not by code.
   const MODES = useMemo(() => {
@@ -314,7 +323,6 @@ export default function SalesReportForm() {
               </div>
             )}
           </Section>
-
           <Section title="Debtor">
             <div
               className={`flex items-center justify-between rounded-sm px-3 py-3 border ${
@@ -338,6 +346,37 @@ export default function SalesReportForm() {
                 {formatMoney(Math.max(0, calc.debtor))}
               </span>
             </div>
+
+            {/* NEW: existing outstanding balance across all prior reports */}
+            <div className="mt-2 flex items-center justify-between rounded-sm px-3 py-2 border border-border bg-secondary/30">
+              <span className="text-xs text-foreground/60">
+                Existing Outstanding Debtor Balance
+              </span>
+              <span
+                className="text-sm font-semibold tabular-nums"
+                data-testid="existing-outstanding-debtor"
+              >
+                {outstandingLoading
+                  ? "…"
+                  : outstandingError
+                    ? "—"
+                    : formatMoney(outstandingDebtorAmount)}
+              </span>
+            </div>
+
+            {!outstandingLoading && !outstandingError && (
+              <div className="mt-1 flex items-center justify-between px-3 py-1">
+                <span className="text-xs text-foreground/50">
+                  Projected Total After This Report
+                </span>
+                <span className="text-xs font-medium tabular-nums">
+                  {formatMoney(
+                    outstandingDebtorAmount + Math.max(0, calc.debtor),
+                  )}
+                </span>
+              </div>
+            )}
+
             <p className="text-xs text-foreground/55 mt-2">
               This amount is recorded as an outstanding debtor line item on
               submission.

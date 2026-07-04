@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsNumber, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  ValidateIf,
+} from 'class-validator';
 
 export class CreateDebtorEntryDto {
   @IsUUID()
@@ -10,8 +17,13 @@ export class CreateDebtorEntryDto {
 
   @Type(() => Number)
   @IsNumber()
+  @IsNotEmpty()
   amount: number;
 
   @IsUUID()
-  paymentModeId: string;
+  @IsOptional()
+  @ValidateIf(
+    (dto: CreateDebtorEntryDto) => dto.entryType === 'debtor_received',
+  )
+  paymentModeId?: string | null;
 }

@@ -17,6 +17,7 @@ import { DailyClosingModule } from './modules/daily-closing/daily-closing.module
 import { EncryptionKeysModule } from './modules/encryption-keys/encryption-keys.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { PaymentModeModule } from './modules/bank/payment-mode.module';
+import { ReportsModule } from './modules/reports/reports.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -38,6 +39,7 @@ import { PaymentModeModule } from './modules/bank/payment-mode.module';
     DailyClosingModule,
     EncryptionKeysModule,
     RbacModule,
+    ReportsModule,
     PaymentModeModule,
   ],
 })

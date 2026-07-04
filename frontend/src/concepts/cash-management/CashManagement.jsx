@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { api } from "../../lib/api";
 import {
   formatMoney,
   formatDate,
@@ -29,60 +28,80 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Banknote, PlusCircle, Lock } from "lucide-react";
+import { Loader2, Banknote, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
+
+// RTK Query API slice (the file you pasted) — adjust this path to wherever
+// cashApi.js actually lives in your project (e.g. "../../store/cashApi").
+import {
+  useGetCashSummaryQuery,
+  useGetLatestCashOpeningQuery,
+  useGetCashOpeningQuery,
+  useGetCashAdjustmentsQuery,
+  useCreateCashOpeningMutation,
+  useCreateCashAdjustmentMutation,
+} from "../../api/cash.api";
 
 export default function CashManagement() {
   const { user, isAdmin } = useAuth();
   const allowed = isAdmin || (user?.permissions || []).includes("manage_cash");
 
-  const [summary, setSummary] = useState(null);
-  const [openings, setOpenings] = useState([]);
-  const [adjustments, setAdjustments] = useState([]);
+  const today = todayStr();
+
+  // Date the "history" tables below are filtered by. Defaults to today.
+  const [historyDate, setHistoryDate] = useState(today);
+
   const [openForm, setOpenForm] = useState({
-    date: todayStr(),
+    date: today,
     amount: "",
     reason: "",
   });
   const [adjForm, setAdjForm] = useState({
-    date: todayStr(),
+    date: today,
     type: "add",
     amount: "",
     reason: "",
   });
-  const [savingOpen, setSavingOpen] = useState(false);
-  const [savingAdj, setSavingAdj] = useState(false);
 
-  const load = useCallback(async () => {
-    const [s, o, a] = await Promise.all([
-      api.get("/cash/summary", { params: { timeline: "today" } }),
-      api.get("/cash/openings"),
-      api.get("/cash/adjustments"),
-    ]);
-    setSummary(s.data);
-    setOpenings(o.data.rows || []);
-    setAdjustments(a.data.rows || []);
-  }, []);
+  // ------------------------------------------------------------------
+  // Reads — all driven by RTK Query, so results are cached and refetch
+  // automatically whenever a mutation below invalidates their tags.
+  // ------------------------------------------------------------------
+  const { data: summary, isFetching: summaryLoading } =
+    useGetCashSummaryQuery(today);
+
+  const { data: latestOpening } = useGetLatestCashOpeningQuery();
+
+  const { data: opening, isFetching: openingLoading } =
+    useGetCashOpeningQuery(historyDate);
+
+  const { data: adjustments = [], isFetching: adjustmentsLoading } =
+    useGetCashAdjustmentsQuery(historyDate);
+
+  // ------------------------------------------------------------------
+  // Writes — mutations invalidate CashOpening/CashAdjustment/CashSummary
+  // tags, so the queries above refetch on their own; no manual `load()`.
+  // ------------------------------------------------------------------
+  const [createCashOpening, { isLoading: savingOpen }] =
+    useCreateCashOpeningMutation();
+  const [createCashAdjustment, { isLoading: savingAdj }] =
+    useCreateCashAdjustmentMutation();
 
   const submitOpening = async () => {
     if (Number(openForm.amount || 0) < 0) {
       toast.error("Cash Opening cannot be negative");
       return;
     }
-    setSavingOpen(true);
     try {
-      await api.post("/cash/openings", {
+      await createCashOpening({
         date: openForm.date,
         amount: Number(openForm.amount || 0),
         reason: openForm.reason,
-      });
+      }).unwrap();
       toast.success("Cash Opening saved");
-      setOpenForm({ date: todayStr(), amount: "", reason: "" });
-      load();
+      setOpenForm({ date: today, amount: "", reason: "" });
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed");
-    } finally {
-      setSavingOpen(false);
+      toast.error(err?.data?.detail || "Failed to save cash opening");
     }
   };
 
@@ -95,21 +114,17 @@ export default function CashManagement() {
       toast.error("A reason is mandatory");
       return;
     }
-    setSavingAdj(true);
     try {
-      await api.post("/cash/adjustments", {
+      await createCashAdjustment({
         date: adjForm.date,
         type: adjForm.type,
         amount: Number(adjForm.amount || 0),
         reason: adjForm.reason,
-      });
+      }).unwrap();
       toast.success("Cash Adjustment recorded");
-      setAdjForm({ date: todayStr(), type: "add", amount: "", reason: "" });
-      load();
+      setAdjForm({ date: today, type: "add", amount: "", reason: "" });
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed");
-    } finally {
-      setSavingAdj(false);
+      toast.error(err?.data?.detail || "Failed to record adjustment");
     }
   };
 
@@ -118,28 +133,46 @@ export default function CashManagement() {
   return (
     <Layout title="Cash Management">
       <div className="space-y-4">
-        {/* Net cash snapshot */}
+        {/* Net cash snapshot — fields match CashService.getDailySummary() */}
         <div
           className="grid grid-cols-2 lg:grid-cols-5 gap-3"
           data-testid="cash-snapshot"
         >
           <Snap
             label="Cash Opening (Today)"
-            value={formatMoney(s.cash_opening)}
+            value={formatMoney(s.openingAmount)}
+            loading={summaryLoading}
           />
-          <Snap label="Cash Retail" value={formatMoney(s.cash_retail)} />
           <Snap
-            label="Cash Debtor Received"
-            value={formatMoney(s.cash_debtor_received)}
+            label="Cash In (Income)"
+            value={formatMoney(s.income)}
+            loading={summaryLoading}
           />
-          <Snap label="Cash Expenses" value={formatMoney(s.cash_expenses)} />
+          <Snap
+            label="Cash Expenses"
+            value={formatMoney(s.expense)}
+            loading={summaryLoading}
+          />
+          <Snap
+            label="Adjustments"
+            value={formatMoney(s.adjustmentTotal)}
+            loading={summaryLoading}
+          />
           <Snap
             label="Net Cash in Hand"
-            value={formatMoney(s.net_cash_in_hand)}
+            value={formatMoney(s.closing)}
             accent
             testId="cash-net-cash"
+            loading={summaryLoading}
           />
         </div>
+
+        {!allowed && (
+          <div className="text-sm text-foreground/60 border border-border rounded-md p-3 bg-card">
+            You have read-only access to Cash Management. Contact an admin for
+            permission to record openings or adjustments.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Enter Cash Opening */}
@@ -147,6 +180,12 @@ export default function CashManagement() {
             <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
               <Banknote className="h-4 w-4" /> Enter Cash Opening
             </h2>
+            {latestOpening && (
+              <p className="text-xs text-foreground/60 mb-3">
+                Most recent opening: {formatMoney(latestOpening.amount)} on{" "}
+                {formatDate(latestOpening.openingDate)}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Date</Label>
@@ -185,7 +224,7 @@ export default function CashManagement() {
             <Button
               className="mt-3"
               onClick={submitOpening}
-              disabled={savingOpen}
+              disabled={savingOpen || !allowed}
               data-testid="opening-submit"
             >
               {savingOpen ? (
@@ -253,7 +292,7 @@ export default function CashManagement() {
             <Button
               className="mt-3"
               onClick={submitAdjustment}
-              disabled={savingAdj}
+              disabled={savingAdj || !allowed}
               data-testid="adj-submit"
             >
               {savingAdj ? (
@@ -266,10 +305,23 @@ export default function CashManagement() {
           </Card>
         </div>
 
-        {/* History */}
+        {/* History — filtered by a single date, since the backend's
+            GET /cash/openings and GET /cash/adjustments both take a
+            ?date= query param rather than returning an all-time list. */}
+        <div className="flex items-center gap-2">
+          <Label className="text-xs">History date</Label>
+          <Input
+            type="date"
+            className="w-40"
+            value={historyDate}
+            onChange={(e) => setHistoryDate(e.target.value)}
+            data-testid="history-date"
+          />
+        </div>
+
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="p-3 border-b border-border font-semibold text-sm">
-            Cash Opening History
+            Cash Opening — {formatDate(historyDate)}
           </div>
           <div
             className="overflow-x-auto thin-scroll"
@@ -287,36 +339,40 @@ export default function CashManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {openings.length === 0 ? (
+                {openingLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-6">
+                      <Loader2 className="h-4 w-4 animate-spin inline" />
+                    </TableCell>
+                  </TableRow>
+                ) : !opening ? (
                   <TableRow>
                     <TableCell
                       colSpan={6}
                       className="text-center text-sm text-foreground/50 py-6"
                     >
-                      No cash opening entries yet
+                      No cash opening entry for this date
                     </TableCell>
                   </TableRow>
                 ) : (
-                  openings.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell>{formatDate(o.date)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">
-                        {formatMoney(o.amount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {o.previous_amount != null
-                          ? formatMoney(o.previous_amount)
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {o.reason || "-"}
-                      </TableCell>
-                      <TableCell>{o.entered_by_name}</TableCell>
-                      <TableCell className="text-xs">
-                        {formatDateTime(o.created_at)}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow key={opening.id}>
+                    <TableCell>{formatDate(opening.openingDate)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {formatMoney(opening.amount)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {opening.previousAmount != null
+                        ? formatMoney(opening.previousAmount)
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {opening.reason || "-"}
+                    </TableCell>
+                    <TableCell>{opening.user?.name || "-"}</TableCell>
+                    <TableCell className="text-xs">
+                      {formatDateTime(opening.createdAt)}
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -325,7 +381,7 @@ export default function CashManagement() {
 
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="p-3 border-b border-border font-semibold text-sm">
-            Cash Adjustment History
+            Cash Adjustments — {formatDate(historyDate)}
           </div>
           <div
             className="overflow-x-auto thin-scroll"
@@ -343,19 +399,25 @@ export default function CashManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {adjustments.length === 0 ? (
+                {adjustmentsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-6">
+                      <Loader2 className="h-4 w-4 animate-spin inline" />
+                    </TableCell>
+                  </TableRow>
+                ) : adjustments.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={6}
                       className="text-center text-sm text-foreground/50 py-6"
                     >
-                      No adjustments yet
+                      No adjustments for this date
                     </TableCell>
                   </TableRow>
                 ) : (
                   adjustments.map((a) => (
                     <TableRow key={a.id}>
-                      <TableCell>{formatDate(a.date)}</TableCell>
+                      <TableCell>{formatDate(a.adjustmentDate)}</TableCell>
                       <TableCell>
                         <span
                           className={`text-xs px-2 py-0.5 rounded-sm border ${a.type === "add" ? "border-border" : "border-primary/40 text-primary"}`}
@@ -367,9 +429,9 @@ export default function CashManagement() {
                         {formatMoney(a.amount)}
                       </TableCell>
                       <TableCell className="text-xs">{a.reason}</TableCell>
-                      <TableCell>{a.added_by_name}</TableCell>
+                      <TableCell>{a.user?.name || "-"}</TableCell>
                       <TableCell className="text-xs">
-                        {formatDateTime(a.created_at)}
+                        {formatDateTime(a.createdAt)}
                       </TableCell>
                     </TableRow>
                   ))
@@ -383,7 +445,7 @@ export default function CashManagement() {
   );
 }
 
-function Snap({ label, value, accent, testId }) {
+function Snap({ label, value, accent, testId, loading }) {
   return (
     <Card
       data-testid={testId}
@@ -392,7 +454,9 @@ function Snap({ label, value, accent, testId }) {
       <div className="text-xs font-medium text-foreground/60 uppercase tracking-wide">
         {label}
       </div>
-      <div className="text-xl font-bold tabular-nums mt-1">{value}</div>
+      <div className="text-xl font-bold tabular-nums mt-1">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : value}
+      </div>
     </Card>
   );
 }

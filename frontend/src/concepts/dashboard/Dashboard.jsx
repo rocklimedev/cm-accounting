@@ -1,14 +1,9 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../store/use-auth";
-import { api } from "../../lib/api";
-import {
-  formatMoney,
-  formatNumber,
-  formatDate,
-  formatDateTime,
-} from "../../lib/format";
+import { useGetDashboardQuery } from "../../api/reports.api"; // adjust path to where reportsApi lives
+import { formatMoney, formatNumber, formatDate } from "../../lib/format";
 import { TimelineFilter } from "../../components/TimelineFilter";
 import { StatusBadge } from "../../components/StatusBadge";
 import { CHART, SLICE_FILLS } from "../../components/chartTheme";
@@ -91,40 +86,41 @@ const TL = {
 export default function Dashboard() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+
   const [timeline, setTimeline] = useState("this_month");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (tl, s, e) => {
-    setLoading(true);
-    try {
-      const params = { timeline: tl };
-      if (tl === "custom" || tl === "date_to_date") {
-        params.start = s;
-        params.end = e;
-      }
-      const res = await api.get("/dashboard", { params });
-      setData(res.data);
-    } finally {
-      setLoading(false);
+  // Only these get sent to the query — decoupled from the raw
+  // date inputs so typing doesn't trigger a fetch on every keystroke.
+  const [appliedRange, setAppliedRange] = useState({ start: "", end: "" });
+
+  const isCustom = timeline === "custom" || timeline === "date_to_date";
+
+  const queryParams = useMemo(() => {
+    const params = { timeline };
+    if (isCustom) {
+      params.start = appliedRange.start;
+      params.end = appliedRange.end;
     }
-  }, []);
+    return params;
+  }, [timeline, isCustom, appliedRange]);
 
-  useEffect(() => {
-    if (timeline === "custom" && (!start || !end)) return;
-    load(timeline, start, end);
-  }, [timeline, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shouldSkip = isCustom && (!appliedRange.start || !appliedRange.end);
+
+  const { data, isFetching } = useGetDashboardQuery(queryParams, {
+    skip: shouldSkip,
+  });
 
   const onApply = () => {
-    if (start && end) load(timeline, start, end);
+    if (start && end) setAppliedRange({ start, end });
   };
+
+  const loading = isFetching && !data;
+
   const c = data?.cards || {};
   const subLabel = TL[timeline] || timeline;
-  const dashboard = data ?? {};
 
-  const debtorTrend = dashboard.debtor_trend ?? {};
   const debtorTrendData = data
     ? [
         { label: "Opening", value: data.debtor_trend.opening },

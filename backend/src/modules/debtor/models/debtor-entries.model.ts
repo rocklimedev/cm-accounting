@@ -49,8 +49,7 @@ export class DebtorEntry extends Model<DebtorEntry> {
     type: DataType.DECIMAL(18, 2),
     field: 'amount',
   })
-  amount: string;
-
+  declare amount: string;
   @AllowNull(true)
   @ForeignKey(() => PaymentMode)
   @Column({
