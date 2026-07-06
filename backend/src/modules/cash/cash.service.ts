@@ -84,11 +84,13 @@ export class CashService {
   // =====================================
 
   async createCashOpening(dto: CreateCashOpeningDto, userId: string) {
+    const paymentModeId = await this.getCashPaymentModeId();
+
     const opening = await this.openingModel.create({
       ...dto,
+      paymentModeId,
       enteredBy: userId,
     } as any);
-    const paymentModeId = await this.getCashPaymentModeId();
 
     await this.paymentLedgerService.recordOpening({
       entryDate: dto.openingDate,
@@ -98,14 +100,6 @@ export class CashService {
       sourceId: opening.id,
       description: dto.reason || 'Opening balance',
       createdBy: userId,
-    });
-
-    await this.auditService.log({
-      userId,
-      action: 'CREATE',
-      tableName: 'cash_openings',
-      recordId: opening.id,
-      newValue: opening.toJSON(),
     });
 
     return opening;
@@ -130,13 +124,13 @@ export class CashService {
   // =====================================
 
   async createCashAdjustment(dto: CreateCashAdjustmentDto, userId: string) {
-    const adjustment = await this.adjustmentModel.create({
-      ...dto,
-      addedBy: userId,
-    } as any);
-
     const paymentModeId = await this.getCashPaymentModeId();
 
+    const adjustment = await this.adjustmentModel.create({
+      ...dto,
+      paymentModeId,
+      addedBy: userId,
+    } as any);
     await this.paymentLedgerService.recordMovement({
       entryDate: dto.adjustmentDate,
       paymentModeId,

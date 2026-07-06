@@ -35,7 +35,6 @@ import {
   useGetExpenseTitlesQuery,
   useGetExpenseByIdQuery,
   useCreateExpenseMutation,
-  usePostExpenseMutation,
   useVoidExpenseMutation,
 } from "../../api/expense.api";
 import { useGetActivePaymentModesQuery } from "../../api/payment-mode.api";
@@ -93,9 +92,9 @@ export default function ExpenseReportForm() {
   } = useGetExpenseByIdQuery(reportId, { skip: !isEdit });
 
   const [createExpense, { isLoading: creating }] = useCreateExpenseMutation();
-  const [postExpense, { isLoading: posting }] = usePostExpenseMutation();
+
   const [voidExpense, { isLoading: voiding }] = useVoidExpenseMutation();
-  const saving = creating || posting;
+  const saving = creating;
 
   // ---- prefill a brand-new report from titles / localStorage --------------
   useEffect(() => {
@@ -190,7 +189,7 @@ export default function ExpenseReportForm() {
       const created = await createExpense(buildPayload()).unwrap();
 
       toast.success("Draft saved");
-      navigate(`/reports/${created.id}`);
+      navigate(`/expense-reports/${created.id}`);
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to save report");
     }
@@ -199,10 +198,9 @@ export default function ExpenseReportForm() {
   const submitNew = async () => {
     try {
       const created = await createExpense(buildPayload()).unwrap();
-      await postExpense(created.id).unwrap();
 
       toast.success("Expense report submitted");
-      navigate(`/reports/${created.id}`);
+      navigate(`/expense-reports/${created.id}`);
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to submit report");
     } finally {
@@ -212,7 +210,6 @@ export default function ExpenseReportForm() {
 
   const postExisting = async () => {
     try {
-      await postExpense(reportId).unwrap();
       toast.success("Expense report submitted");
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to submit report");
@@ -246,10 +243,10 @@ export default function ExpenseReportForm() {
       </Layout>
     );
 
-  const status = isEdit ? existingReport?.status || "draft" : null;
-  const canPost = isEdit && status === "draft";
+  const status = isEdit ? existingReport?.status || "posted" : null;
+  const canPost = isEdit && status === "posted";
   const canVoid =
-    isEdit && status !== "void" && (isAdmin || status === "draft");
+    isEdit && status !== "void" && (isAdmin || status === "posted");
 
   const nowTime = new Date().toLocaleTimeString("en-IN", {
     hour: "2-digit",
