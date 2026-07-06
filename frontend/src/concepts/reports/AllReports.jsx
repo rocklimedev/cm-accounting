@@ -62,7 +62,21 @@ export default function AllReports() {
     sort_by: "created_at",
     sort_dir: "desc",
   });
+  const getReportRoute = (report) => {
+    switch (report.report_type) {
+      case "sales":
+        return `/sales-reports/${report.report_id}`;
 
+      case "expense":
+        return `/expense-reports/${report.report_id}`;
+
+      case "debtor":
+        return `/debtor-reports/${report.report_id}`;
+
+      default:
+        return `/reports/${report.report_id}`;
+    }
+  };
   const { data: usersData } = useGetUsersQuery(undefined, {
     skip: !isAdmin,
   });
@@ -204,18 +218,18 @@ export default function AllReports() {
                   rows.map((r) => (
                     <TableRow
                       key={r.report_id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/reports/${r.report_id}`)}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(getReportRoute(r))}
                     >
                       <TableCell className="font-medium">
-                        {r.report_id}
+                        {r.report_no}
                       </TableCell>
 
                       <TableCell>{formatDate(r.report_date)}</TableCell>
 
                       <TableCell>{TYPE_LABEL[r.report_type]}</TableCell>
 
-                      <TableCell>{r.submitted_by_name || "-"}</TableCell>
+                      <TableCell>{r.created_by_name || "-"}</TableCell>
 
                       <TableCell className="text-right font-semibold">
                         {formatMoney(r.main_amount)}

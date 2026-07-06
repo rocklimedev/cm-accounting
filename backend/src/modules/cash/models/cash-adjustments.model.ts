@@ -16,9 +16,11 @@ import { User } from '@/modules/users/models/user.model';
 })
 export class CashAdjustment extends Model<CashAdjustment> {
   @PrimaryKey
-  @Column(DataType.UUID)
+  @Column({
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
+  })
   declare id: string;
-
   @Column({
     field: 'adjustment_date',
     type: DataType.DATEONLY,

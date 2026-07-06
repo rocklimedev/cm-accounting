@@ -1,15 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1";
-
-const baseQuery = fetchBaseQuery({
-  baseUrl: BACKEND_URL,
-});
-
-export const paymentModeApi = createApi({
-  reducerPath: "paymentModeApi",
-  baseQuery,
-  tagTypes: ["PaymentMode"],
+export const paymentModeApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // Get all payment modes
     getPaymentModes: builder.query({
@@ -61,19 +52,23 @@ export const paymentModeApi = createApi({
       invalidatesTags: ["PaymentMode"],
     }),
 
-    // ==================== NEW: PAYMENT MODE RECONCILIATION REPORT ====================
+    // Payment Mode Reconciliation Report
     getPaymentModeReport: builder.query({
-      query: (params) => ({
+      query: (params = {}) => ({
         url: "/payment-modes/report/payment-modes",
         params: {
-          from: params?.from,
-          to: params?.to,
-          includeInactive: params?.includeInactive,
+          ...(params.from && { from: params.from }),
+          ...(params.to && { to: params.to }),
+          ...(params.includeInactive !== undefined && {
+            includeInactive: params.includeInactive,
+          }),
         },
       }),
-      providesTags: ["PaymentMode"], // You can create a separate tag like "PaymentModeReport" if needed
+      providesTags: ["PaymentMode"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
 export const {
@@ -83,6 +78,5 @@ export const {
   useCreatePaymentModeMutation,
   useUpdatePaymentModeMutation,
   useDeletePaymentModeMutation,
-  // New export
   useGetPaymentModeReportQuery,
 } = paymentModeApi;

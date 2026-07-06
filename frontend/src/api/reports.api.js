@@ -1,32 +1,12 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1";
-
-export const reportsApi = createApi({
-  reducerPath: "reportsApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: BACKEND_URL,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Report", "Dashboard"],
-
+export const reportsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ---------------- Reports ----------------
 
     getReports: builder.query({
       query: (params = {}) => ({
         url: "/reports",
-        method: "GET",
         params,
       }),
       providesTags: ["Report"],
@@ -35,10 +15,16 @@ export const reportsApi = createApi({
     getReport: builder.query({
       query: ({ id, type }) => ({
         url: `/reports/${id}`,
-        method: "GET",
         params: { type },
       }),
       providesTags: (_result, _error, { id }) => [{ type: "Report", id }],
+    }),
+
+    getDraftReports: builder.query({
+      query: () => ({
+        url: "/reports/drafts",
+      }),
+      providesTags: ["Report"],
     }),
 
     // ---------------- Dashboard ----------------
@@ -46,13 +32,18 @@ export const reportsApi = createApi({
     getDashboard: builder.query({
       query: (params = {}) => ({
         url: "/reports/dashboard",
-        method: "GET",
         params,
       }),
       providesTags: ["Dashboard"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
-export const { useGetReportsQuery, useGetReportQuery, useGetDashboardQuery } =
-  reportsApi;
+export const {
+  useGetReportsQuery,
+  useGetReportQuery,
+  useGetDraftReportsQuery,
+  useGetDashboardQuery,
+} = reportsApi;

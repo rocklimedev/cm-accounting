@@ -121,14 +121,20 @@ export default function Dashboard() {
   const c = data?.cards || {};
   const subLabel = TL[timeline] || timeline;
 
-  const debtorTrendData = data
-    ? [
-        { label: "Opening", value: data.debtor_trend.opening },
-        { label: "New Debtor", value: data.debtor_trend.new_debtor },
-        { label: "Received", value: data.debtor_trend.received },
-        { label: "Closing", value: data.debtor_trend.closing },
-      ]
-    : [];
+  const debtorTrendData = useMemo(() => {
+    const trend = data?.debtor_trend;
+
+    if (!trend) {
+      return [];
+    }
+
+    return [
+      { label: "Opening", value: trend.opening ?? 0 },
+      { label: "New Debtor", value: trend.new_debtor ?? 0 },
+      { label: "Received", value: trend.received ?? 0 },
+      { label: "Closing", value: trend.closing ?? 0 },
+    ];
+  }, [data]);
 
   return (
     <Layout title="Dashboard">

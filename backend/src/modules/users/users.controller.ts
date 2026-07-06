@@ -17,6 +17,7 @@ import {
   IsString,
   IsUUID,
   MinLength,
+  IsBoolean,
 } from 'class-validator';
 
 import { UsersService } from './users.service';
@@ -34,8 +35,11 @@ class CreateUserDto {
 
   @IsUUID()
   role_id: string;
-}
 
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+}
 class UpdateUserDto {
   @IsOptional()
   @IsString()

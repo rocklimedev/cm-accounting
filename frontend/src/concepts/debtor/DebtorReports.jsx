@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useAuth } from "../../store/use-auth";
 import { useGetUsersQuery } from "../../api/users.api";
+import { api } from "@/lib/api";
 import { downloadCsv } from "@/lib/reportsApi";
 import { formatMoney, formatDate } from "@/lib/format";
 import { ReportFilters } from "@/components/ReportFilters";
-import { ReportActionMenu } from "@/components/ReportActionMenu";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,15 +19,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Download,
+  MoreHorizontal,
+  Eye,
+  MessageSquare,
+  Trash2,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import {
   useGetLatestReportQuery,
   useGetDebtorBalanceQuery,
 } from "../../api/debtor.api";
 
+const BASE_ROUTE = "debtor-reports";
+
 export default function DebtorReports() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const defaultFilters = {
@@ -43,6 +69,12 @@ export default function DebtorReports() {
 
   const [filters, setFilters] = useState(defaultFilters);
   const [applied, setApplied] = useState(defaultFilters);
+
+  // Row-action state (previously inside ReportActionMenu)
+  const [activeReport, setActiveReport] = useState(null);
+  const [dialog, setDialog] = useState(null); // { type: "remark" | "delete" }
+  const [remark, setRemark] = useState("");
+  const [busy, setBusy] = useState(false);
 
   // Latest debtor report (raw API shape)
   const {
@@ -83,7 +115,9 @@ export default function DebtorReports() {
       return {
         report_id: report.id,
         report_date: report.reportDate,
+        debtor_no: report.debtorNo,
         submitted_by: report.submittedBy,
+        submitted_by_id: report.submittedBy,
         submitted_by_name:
           employeeMap[report.submittedBy] || report.submittedBy,
         new_debtor: Number(report.newDebtorTotal) || 0,
@@ -182,6 +216,65 @@ export default function DebtorReports() {
     downloadCsv(`chhabra_marble_debtor_${Date.now()}.csv`, rows, columns);
   };
 
+  // --- Row action helpers (previously in ReportActionMenu) ---
+
+  const openRemarkDialog = (report) => {
+    setActiveReport(report);
+    setRemark("");
+    setDialog({ type: "remark" });
+  };
+
+  const openDeleteDialog = (report) => {
+    setActiveReport(report);
+    setDialog({ type: "delete" });
+  };
+
+  const closeDialog = () => {
+    setDialog(null);
+    setActiveReport(null);
+    setRemark("");
+  };
+
+  const addRemark = async () => {
+    if (!remark.trim()) {
+      toast.error("A remark is required");
+      return;
+    }
+    if (!activeReport) return;
+
+    setBusy(true);
+    try {
+      await api.post(`/${BASE_ROUTE}/${activeReport.report_id}/remark`, {
+        remark,
+      });
+
+      toast.success("Remark added");
+      closeDialog();
+      refetch?.();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!activeReport) return;
+
+    setBusy(true);
+    try {
+      await api.delete(`/reports/${activeReport.report_id}`);
+
+      toast.success("Report deleted");
+      closeDialog();
+      refetch?.();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Layout title="Debtor Reports">
       <div className="space-y-4">
@@ -265,52 +358,152 @@ export default function DebtorReports() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((row) => (
-                    <TableRow
-                      key={row.report_id}
-                      className="cursor-pointer hover:bg-secondary/70"
-                      onClick={() =>
-                        navigate(`/debtor-reports/${row.report_id}`)
-                      }
-                    >
-                      <TableCell className="font-medium">
-                        {row.report_id}
-                      </TableCell>
+                  rows.map((row) => {
+                    const isOwner = row.submitted_by_id === user?.id;
+                    const isDraft = row.status === "draft";
+                    const canDelete = isAdmin || (isOwner && isDraft);
+                    const viewPath = `/${BASE_ROUTE}/${row.report_id}`;
 
-                      <TableCell>{formatDate(row.report_date)}</TableCell>
-
-                      <TableCell>{row.submitted_by_name}</TableCell>
-
-                      <TableCell className="text-right tabular-nums">
-                        {formatMoney(row.new_debtor)}
-                      </TableCell>
-
-                      <TableCell className="text-right tabular-nums">
-                        {formatMoney(row.debtor_received)}
-                      </TableCell>
-
-                      <TableCell className="text-right tabular-nums font-semibold">
-                        {formatMoney(row.closing_debtor)}
-                      </TableCell>
-
-                      <TableCell>
-                        <StatusBadge status={row.status} />
-                      </TableCell>
-
-                      <TableCell
-                        className="text-right"
-                        onClick={(e) => e.stopPropagation()}
+                    return (
+                      <TableRow
+                        key={row.report_id}
+                        className="cursor-pointer hover:bg-secondary/70"
+                        onClick={() =>
+                          navigate(`/debtor-reports/${row.report_id}`)
+                        }
                       >
-                        <ReportActionMenu report={row} onChanged={refetch} />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        <TableCell className="font-medium">
+                          {row.debtor_no}
+                        </TableCell>
+
+                        <TableCell>{formatDate(row.report_date)}</TableCell>
+
+                        <TableCell>{row.submitted_by_name}</TableCell>
+
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.new_debtor)}
+                        </TableCell>
+
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.debtor_received)}
+                        </TableCell>
+
+                        <TableCell className="text-right tabular-nums font-semibold">
+                          {formatMoney(row.closing_debtor)}
+                        </TableCell>
+
+                        <TableCell>
+                          <StatusBadge status={row.status} />
+                        </TableCell>
+
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-48"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <DropdownMenuItem
+                                onClick={() => navigate(viewPath)}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+
+                              {isAdmin && (
+                                <DropdownMenuItem
+                                  onClick={() => openRemarkDialog(row)}
+                                >
+                                  <MessageSquare className="mr-2 h-4 w-4" />
+                                  Add Remark
+                                </DropdownMenuItem>
+                              )}
+
+                              {canDelete && (
+                                <>
+                                  <DropdownMenuSeparator />
+
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => openDeleteDialog(row)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
         </Card>
       </div>
+
+      {/* Single shared dialog for remark/delete actions, driven by activeReport */}
+      <Dialog open={!!dialog} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>
+              {dialog?.type === "delete"
+                ? `Delete Report - ${activeReport?.report_id}`
+                : `Add Remark - ${activeReport?.report_id}`}
+            </DialogTitle>
+
+            {dialog?.type === "delete" && (
+              <DialogDescription>
+                This action cannot be undone.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {dialog?.type === "remark" && (
+            <Textarea
+              rows={3}
+              placeholder="Enter remark..."
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+            />
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+
+            {dialog?.type === "delete" ? (
+              <Button onClick={doDelete} disabled={busy} variant="destructive">
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
+            ) : (
+              <Button onClick={addRemark} disabled={busy}>
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Remark
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

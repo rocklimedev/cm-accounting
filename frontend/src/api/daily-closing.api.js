@@ -1,39 +1,21 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
-
-export const dailyClosingApi = createApi({
-  reducerPath: "dailyClosingApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}/daily-closing`,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["DailyClosing"],
-
+export const dailyClosingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // GET /daily-closing
     getDailyClosings: builder.query({
-      query: () => "",
+      query: () => "/daily-closing",
       providesTags: ["DailyClosing"],
     }),
 
     // GET /daily-closing/verify
     verifyClosingChain: builder.query({
-      query: () => "/verify",
+      query: () => "/daily-closing/verify",
     }),
 
     // GET /daily-closing/:report_date
     getDailyClosingByDate: builder.query({
-      query: (reportDate) => `/${reportDate}`,
+      query: (reportDate) => `/daily-closing/${reportDate}`,
       providesTags: (result, error, reportDate) => [
         { type: "DailyClosing", id: reportDate },
       ],
@@ -42,13 +24,15 @@ export const dailyClosingApi = createApi({
     // POST /daily-closing
     closeDay: builder.mutation({
       query: (data) => ({
-        url: "",
+        url: "/daily-closing",
         method: "POST",
         body: data,
       }),
       invalidatesTags: ["DailyClosing"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
 export const {

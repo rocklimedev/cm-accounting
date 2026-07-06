@@ -7,8 +7,11 @@ import {
   Default,
   HasMany,
   Unique,
+  ForeignKey,
+  BelongsTo,
 } from 'sequelize-typescript';
 import { ExpenseItem } from './expense-item.model';
+import { User } from '../../users/models/user.model'; // adjust path if needed
 
 export enum ReportStatus {
   DRAFT = 'DRAFT',
@@ -43,6 +46,20 @@ export class ExpenseReport extends Model<ExpenseReport> {
   @Default(0)
   @Column(DataType.DECIMAL(18, 2))
   declare total_amount: number;
+
+  // Created By
+  @ForeignKey(() => User)
+  @Column({
+    type: DataType.UUID,
+    allowNull: false,
+  })
+  declare created_by: string;
+
+  @BelongsTo(() => User, {
+    foreignKey: 'created_by',
+    as: 'creator',
+  })
+  declare creator: User;
 
   // HMAC-SHA256 over canonical record + hash chain link
   @Column(DataType.STRING(255))

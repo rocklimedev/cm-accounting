@@ -8,6 +8,8 @@ import {
   CreatedAt,
   HasMany,
   AllowNull,
+  AutoIncrement,
+  Unique,
 } from 'sequelize-typescript';
 import { v4 as uuidv4 } from 'uuid';
 import { DebtorEntry } from './debtor-entries.model';
@@ -24,7 +26,13 @@ export class DebtorReport extends Model<DebtorReport> {
     field: 'id',
   })
   declare id: string;
-
+  @Unique
+  @AllowNull(false)
+  @Column({
+    type: DataType.STRING(20),
+    field: 'debtor_no',
+  })
+  declare debtorNo: string;
   @AllowNull(false)
   @Column({
     type: DataType.DATEONLY,

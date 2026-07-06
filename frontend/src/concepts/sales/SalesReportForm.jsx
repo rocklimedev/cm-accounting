@@ -81,10 +81,8 @@ export default function SalesReportForm() {
 
   const [createSalesReport, { isLoading: creating }] =
     useCreateSalesReportMutation();
-  const [postSalesReport, { isLoading: posting }] =
-    usePostSalesReportMutation();
 
-  const saving = creating || posting;
+  const saving = creating;
 
   const [form, setForm] = useState(null);
   const [reportStatus, setReportStatus] = useState(null);
@@ -208,13 +206,9 @@ export default function SalesReportForm() {
       const payload = buildPayload();
       const created = await createSalesReport(payload).unwrap();
 
-      if (finalize) {
-        await postSalesReport({ id: created.id }).unwrap();
-      }
-
       localStorage.removeItem(storageKey);
-      toast.success(finalize ? "Sales report submitted" : "Draft saved");
-      navigate(`/reports/${created.id}`);
+
+      navigate(`/sales-reports/${created.id}`);
     } catch (err) {
       const message = Array.isArray(err?.data?.message)
         ? err.data.message.join(", ")

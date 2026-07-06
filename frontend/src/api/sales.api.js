@@ -1,25 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
-
-export const salesApi = createApi({
-  reducerPath: "salesApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: BACKEND_URL,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Sales", "Draft"],
-
+export const salesApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // GET /sales
     getSales: builder.query({
@@ -42,6 +23,8 @@ export const salesApi = createApi({
       }),
       invalidatesTags: ["Sales", "Draft"],
     }),
+
+    // PATCH /sales/:id
     updateSalesReport: builder.mutation({
       query: ({ id, ...body }) => ({
         url: `/sales/${id}`,
@@ -54,6 +37,7 @@ export const salesApi = createApi({
         "Draft",
       ],
     }),
+
     // POST /sales/:id/post
     postSalesReport: builder.mutation({
       query: (id) => ({
@@ -72,7 +56,10 @@ export const salesApi = createApi({
       invalidatesTags: ["Sales", "Draft"],
     }),
   }),
+
+  overrideExisting: false,
 });
+
 export const {
   useGetSalesQuery,
   useGetSalesReportByIdQuery,

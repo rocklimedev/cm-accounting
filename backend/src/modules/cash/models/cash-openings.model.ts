@@ -4,18 +4,19 @@ import {
   Model,
   DataType,
   PrimaryKey,
+  Default,
   ForeignKey,
   BelongsTo,
   CreatedAt,
 } from 'sequelize-typescript';
 import { User } from '@/modules/users/models/user.model';
-
 @Table({
   tableName: 'cash_openings',
   timestamps: false,
 })
 export class CashOpening extends Model<CashOpening> {
   @PrimaryKey
+  @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
   declare id: string;
 

@@ -1,46 +1,27 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1";
-
-export const debtorApi = createApi({
-  reducerPath: "debtorApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}/debtors`,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Debtor", "DebtorReport", "DebtorEntry"],
-
+export const debtorApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // =====================================
     // TRANSACTIONS
     // =====================================
 
     getDebtors: builder.query({
-      query: (customerName) =>
-        customerName
-          ? `/transactions?customer_name=${encodeURIComponent(customerName)}`
-          : "/transactions",
+      query: (customerName) => ({
+        url: "/debtors/transactions",
+        params: customerName ? { customer_name: customerName } : undefined,
+      }),
       providesTags: ["Debtor"],
     }),
 
     getDebtorById: builder.query({
-      query: (id) => `/transactions/${id}`,
+      query: (id) => `/debtors/transactions/${id}`,
       providesTags: (result, error, id) => [{ type: "Debtor", id }],
     }),
 
     createDebtorTransaction: builder.mutation({
       query: (data) => ({
-        url: "/transactions",
+        url: "/debtors/transactions",
         method: "POST",
         body: data,
       }),
@@ -52,14 +33,17 @@ export const debtorApi = createApi({
     // =====================================
 
     getDebtorBalance: builder.query({
-      query: (customerName) =>
-        `/balance?customer_name=${encodeURIComponent(customerName)}`,
+      query: (customerName) => ({
+        url: "/debtors/balance",
+        params: { customer_name: customerName },
+      }),
       providesTags: (result, error, customerName) => [
         { type: "Debtor", id: customerName },
       ],
     }),
+
     getDebtorReport: builder.query({
-      query: (reportId) => `/report/${reportId}`,
+      query: (reportId) => `/debtors/report/${reportId}`,
       providesTags: (result, error, reportId) => [
         { type: "DebtorReport", id: reportId },
       ],
@@ -71,7 +55,7 @@ export const debtorApi = createApi({
 
     createDebtorReport: builder.mutation({
       query: (data) => ({
-        url: "/reports",
+        url: "/debtors/reports",
         method: "POST",
         body: data,
       }),
@@ -79,38 +63,42 @@ export const debtorApi = createApi({
     }),
 
     getReports: builder.query({
-      query: (reportDate) =>
-        reportDate
-          ? `/reports?reportDate=${encodeURIComponent(reportDate)}`
-          : "/reports",
+      query: (reportDate) => ({
+        url: "/debtors/reports",
+        params: reportDate ? { reportDate } : undefined,
+      }),
       providesTags: ["DebtorReport"],
     }),
 
     getLatestReport: builder.query({
-      query: () => "/reports/latest",
+      query: () => "/debtors/reports/latest",
       providesTags: ["DebtorReport"],
     }),
 
     getReportSummary: builder.query({
-      query: (reportDate) =>
-        `/reports/summary?reportDate=${encodeURIComponent(reportDate)}`,
+      query: (reportDate) => ({
+        url: "/debtors/reports/summary",
+        params: { reportDate },
+      }),
       providesTags: ["DebtorReport"],
     }),
+
     // =====================================
     // OUTSTANDING DEBTOR
     // =====================================
 
     getOutstandingDebtorAmount: builder.query({
-      query: () => "/outstanding-debtor",
+      query: () => "/debtors/outstanding-debtor",
       providesTags: ["Debtor"],
     }),
+
     // =====================================
     // ENTRIES
     // =====================================
 
     createDebtorEntry: builder.mutation({
       query: (data) => ({
-        url: "/entries",
+        url: "/debtors/entries",
         method: "POST",
         body: data,
       }),
@@ -118,29 +106,25 @@ export const debtorApi = createApi({
     }),
 
     getEntries: builder.query({
-      query: (reportId) => `/entries/${reportId}`,
+      query: (reportId) => `/debtors/entries/${reportId}`,
       providesTags: ["DebtorEntry"],
     }),
   }),
-});
 
-// =====================================
-// EXPORT HOOKS
-// =====================================
+  overrideExisting: false,
+});
 
 export const {
   useGetDebtorsQuery,
   useGetDebtorByIdQuery,
   useCreateDebtorTransactionMutation,
   useGetDebtorBalanceQuery,
-
-  // ✅ ADD THIS
   useGetDebtorReportQuery,
   useCreateDebtorReportMutation,
   useGetReportsQuery,
   useGetLatestReportQuery,
   useGetReportSummaryQuery,
-  useGetOutstandingDebtorAmountQuery, // ✅ Add this
+  useGetOutstandingDebtorAmountQuery,
   useCreateDebtorEntryMutation,
   useGetEntriesQuery,
 } = debtorApi;

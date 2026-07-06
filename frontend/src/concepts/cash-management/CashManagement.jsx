@@ -31,8 +31,6 @@ import {
 import { Loader2, Banknote, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
-// RTK Query API slice (the file you pasted) — adjust this path to wherever
-// cashApi.js actually lives in your project (e.g. "../../store/cashApi").
 import {
   useGetCashSummaryQuery,
   useGetLatestCashOpeningQuery,

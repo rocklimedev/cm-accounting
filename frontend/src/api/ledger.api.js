@@ -1,40 +1,19 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
-
-export const ledgerApi = createApi({
-  reducerPath: "ledgerApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: BACKEND_URL,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Ledger", "Reconciliation"],
-
+export const ledgerApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // GET /ledger
     getLedgerEntries: builder.query({
-      query: (params = {}) => {
-        const searchParams = new URLSearchParams();
-
-        if (params.from) searchParams.append("from", params.from);
-        if (params.to) searchParams.append("to", params.to);
-        if (params.account_name)
-          searchParams.append("account_name", params.account_name);
-
-        const queryString = searchParams.toString();
-
-        return `/ledger${queryString ? `?${queryString}` : ""}`;
-      },
+      query: (params = {}) => ({
+        url: "/ledger",
+        params: {
+          ...(params.from && { from: params.from }),
+          ...(params.to && { to: params.to }),
+          ...(params.account_name && {
+            account_name: params.account_name,
+          }),
+        },
+      }),
       providesTags: ["Ledger"],
     }),
 
@@ -64,22 +43,20 @@ export const ledgerApi = createApi({
     }),
 
     // GET /reconciliation
-    // params: { timeline: "this_month" | "custom" | "date_to_date" | ..., start?, end? }
     getReconciliation: builder.query({
-      query: (params = {}) => {
-        const searchParams = new URLSearchParams();
-
-        if (params.timeline) searchParams.append("timeline", params.timeline);
-        if (params.start) searchParams.append("start", params.start);
-        if (params.end) searchParams.append("end", params.end);
-
-        const queryString = searchParams.toString();
-
-        return `/reconciliation${queryString ? `?${queryString}` : ""}`;
-      },
+      query: (params = {}) => ({
+        url: "/reconciliation",
+        params: {
+          ...(params.timeline && { timeline: params.timeline }),
+          ...(params.start && { start: params.start }),
+          ...(params.end && { end: params.end }),
+        },
+      }),
       providesTags: ["Reconciliation"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
 export const {

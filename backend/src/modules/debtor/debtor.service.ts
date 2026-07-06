@@ -33,6 +33,27 @@ export class DebtorService {
     private readonly auditService: AuditService,
   ) {}
 
+  /**
+   * Formats report number like DBR-000001
+   */
+  private formatReport(report: DebtorReport) {
+    return report.toJSON();
+  }
+  private async generateDebtorNo(): Promise<string> {
+    const lastReport = await this.reportModel.findOne({
+      order: [['created_at', 'DESC']],
+    });
+
+    if (!lastReport || !lastReport.debtorNo) {
+      return 'DBR-000001';
+    }
+
+    const match = lastReport.debtorNo.match(/\d+$/);
+
+    const nextNumber = match ? parseInt(match[0], 10) + 1 : 1;
+
+    return `DBR-${String(nextNumber).padStart(6, '0')}`;
+  }
   // =====================================
   // Transactions
   // =====================================
@@ -93,8 +114,11 @@ export class DebtorService {
   // =====================================
 
   async createReport(dto: CreateDebtorReportDto, userId: string) {
+    const debtorNo = await this.generateDebtorNo();
+
     const report = await this.reportModel.create({
       ...dto,
+      debtorNo,
       submittedBy: userId,
     } as any);
 
@@ -110,7 +134,7 @@ export class DebtorService {
   }
 
   async getReport(reportId: string) {
-    return this.reportModel.findByPk(reportId, {
+    const report = await this.reportModel.findByPk(reportId, {
       include: [
         {
           model: DebtorEntry,
@@ -119,7 +143,14 @@ export class DebtorService {
         },
       ],
     });
+
+    if (!report) {
+      throw new NotFoundException('Debtor report not found');
+    }
+
+    return report;
   }
+
   async getLatestReport() {
     return this.reportModel.findAll({
       include: [
@@ -128,7 +159,7 @@ export class DebtorService {
           include: [PaymentMode],
         },
       ],
-      order: [['report_date', 'DESC']], // ✅ FIXED
+      order: [['report_date', 'DESC']],
     });
   }
 
@@ -137,7 +168,6 @@ export class DebtorService {
   // =====================================
 
   async createEntry(dto: CreateDebtorEntryDto, userId: string) {
-    // Only validate payment mode for "debtor_received"
     if (dto.entryType === 'debtor_received') {
       if (!dto.paymentModeId) {
         throw new BadRequestException(
@@ -156,7 +186,6 @@ export class DebtorService {
         throw new NotFoundException('Invalid or inactive payment mode');
       }
     } else {
-      // For new_debtor, ensure paymentModeId is null
       dto.paymentModeId = null;
     }
 
@@ -172,21 +201,19 @@ export class DebtorService {
 
     return entry;
   }
+
   // =====================================
   // Global Outstanding Balance
   // =====================================
 
-  /**
-   * Calculates the global outstanding debtor amount across the entire system
-   * based on the latest calculated report closing ledger.
-   */
-  async getOutstandingDebtorAmount(): Promise<{ totalOutstanding: number }> {
+  async getOutstandingDebtorAmount(): Promise<{
+    totalOutstanding: number;
+  }> {
     const entries = await this.entryModel.findAll();
 
     const totalOutstanding = entries.reduce((sum, entry) => {
       const amount = parseFloat(entry.amount) || 0;
 
-      // 'new_debtor' increments outstanding debt, 'debtor_received' decrements it
       if (entry.entryType === 'new_debtor') {
         return sum + amount;
       } else if (entry.entryType === 'debtor_received') {
@@ -198,6 +225,7 @@ export class DebtorService {
 
     return { totalOutstanding };
   }
+
   async getEntries(reportId: string) {
     return this.entryModel.findAll({
       where: {

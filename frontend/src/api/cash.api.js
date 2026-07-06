@@ -1,25 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1";
-
-export const cashApi = createApi({
-  reducerPath: "cashApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}/cash`,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Cash", "CashOpening", "CashAdjustment", "CashSummary"],
-
+export const cashApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ==========================================================
     // Cash Transactions
@@ -27,20 +8,20 @@ export const cashApi = createApi({
 
     // GET /cash/transactions
     getCashTransactions: builder.query({
-      query: () => "/transactions",
+      query: () => "/cash/transactions",
       providesTags: ["Cash"],
     }),
 
     // GET /cash/transactions/:id
     getCashTransactionById: builder.query({
-      query: (id) => `/transactions/${id}`,
+      query: (id) => `/cash/transactions/${id}`,
       providesTags: (result, error, id) => [{ type: "Cash", id }],
     }),
 
     // POST /cash/transactions
     createCashTransaction: builder.mutation({
       query: (data) => ({
-        url: "/transactions",
+        url: "/cash/transactions",
         method: "POST",
         body: data,
       }),
@@ -54,7 +35,7 @@ export const cashApi = createApi({
     // POST /cash/openings
     createCashOpening: builder.mutation({
       query: (data) => ({
-        url: "/openings",
+        url: "/cash/openings",
         method: "POST",
         body: data,
       }),
@@ -63,14 +44,14 @@ export const cashApi = createApi({
 
     // GET /cash/openings/latest
     getLatestCashOpening: builder.query({
-      query: () => "/openings/latest",
+      query: () => "/cash/openings/latest",
       providesTags: ["CashOpening"],
     }),
 
     // GET /cash/openings?date=YYYY-MM-DD
     getCashOpening: builder.query({
       query: (date) => ({
-        url: "/openings",
+        url: "/cash/openings",
         params: { date },
       }),
       providesTags: ["CashOpening"],
@@ -83,7 +64,7 @@ export const cashApi = createApi({
     // POST /cash/adjustments
     createCashAdjustment: builder.mutation({
       query: (data) => ({
-        url: "/adjustments",
+        url: "/cash/adjustments",
         method: "POST",
         body: data,
       }),
@@ -93,7 +74,7 @@ export const cashApi = createApi({
     // GET /cash/adjustments?date=YYYY-MM-DD
     getCashAdjustments: builder.query({
       query: (date) => ({
-        url: "/adjustments",
+        url: "/cash/adjustments",
         params: { date },
       }),
       providesTags: ["CashAdjustment"],
@@ -106,12 +87,14 @@ export const cashApi = createApi({
     // GET /cash/summary?date=YYYY-MM-DD
     getCashSummary: builder.query({
       query: (date) => ({
-        url: "/summary",
+        url: "/cash/summary",
         params: { date },
       }),
       providesTags: ["CashSummary"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
 export const {

@@ -6,13 +6,18 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
+
 import { SalesReport, ReportStatus } from './models/sales-report.model';
 import { SalesReportItem } from './models/sales-report-item.model';
+import { PaymentMode } from '@/modules/bank/models/payment-mode.model';
+
 import { CreateSalesReportDto } from './dto/create-sales-report.dto';
+
 import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
-import { PaymentMode } from '@/modules/bank/models/payment-mode.model';
 import { DocumentNumberHelper } from '@/common/helper/document-number.helper';
+import { User } from '../users/models/user.model';
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -22,6 +27,9 @@ export class SalesService {
     private auditService: AuditService,
   ) {}
 
+  // =====================================
+  // FIND ALL
+  // =====================================
   async findAll() {
     const reports = await this.reportModel.findAll({
       include: [
@@ -30,6 +38,11 @@ export class SalesService {
           as: 'items',
           include: [{ model: PaymentMode, as: 'paymentMode' }],
         },
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['id', 'name', 'email'],
+        },
       ],
       order: [['report_date', 'DESC']],
     });
@@ -37,6 +50,9 @@ export class SalesService {
     return reports.map((r) => this.toSafeJson(r));
   }
 
+  // =====================================
+  // FIND ONE
+  // =====================================
   async findOne(id: string) {
     const report = await this.reportModel.findByPk(id, {
       include: [
@@ -45,16 +61,25 @@ export class SalesService {
           as: 'items',
           include: [{ model: PaymentMode, as: 'paymentMode' }],
         },
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['id', 'name', 'email'],
+        },
       ],
     });
 
     if (!report) throw new NotFoundException('Sales report not found');
+
     return this.toSafeJson(report);
   }
 
-  /** Decrypts remarks and adds verified flag + computed totals */
+  // =====================================
+  // SAFE TRANSFORM
+  // =====================================
   private toSafeJson(report: SalesReport) {
     const json: any = report.toJSON();
+
     const remarks = json.remarks_cipher
       ? this.crypto.decrypt({
           cipher: json.remarks_cipher,
@@ -70,7 +95,6 @@ export class SalesService {
       ? this.crypto.verify(this.signableFields(json), hmac_signature)
       : null;
 
-    // Compute totals from items for convenience
     const totals = (json.items || []).reduce((acc: any, item: any) => {
       const mode = item.paymentMode?.name || item.payment_mode_id;
       acc[mode] = (acc[mode] || 0) + Number(item.amount);
@@ -81,17 +105,29 @@ export class SalesService {
       ...rest,
       remarks,
       integrity_verified: verified,
+
+      // 👇 creator info
+      created_by_user: json.creator
+        ? {
+            id: json.creator.id,
+            name: json.creator.name,
+            email: json.creator.email,
+          }
+        : null,
+
       items: json.items,
-      totals, // e.g. { "Cash": 12500, "UPI": 8300, ... }
+      totals,
     };
   }
 
+  // =====================================
+  // SIGNABLE DATA
+  // =====================================
   private signableFields(json: any) {
     return {
       report_date: json.report_date,
       gross_amount: json.gross_amount,
       previous_hash: json.previous_hash,
-      // Items are part of integrity (we'll hash them too)
       items: (json.items || []).map((i: any) => ({
         payment_mode_id: i.payment_mode_id,
         amount: i.amount,
@@ -99,6 +135,9 @@ export class SalesService {
     };
   }
 
+  // =====================================
+  // CREATE
+  // =====================================
   async create(dto: CreateSalesReportDto, userId: string) {
     const { report_date, gross_amount, remarks, items } = dto;
 
@@ -117,19 +156,16 @@ export class SalesService {
       );
     }
 
-    // Generate Sales Number
     const salesNo = await DocumentNumberHelper.generate(
       this.reportModel,
       'sales_no',
       'SAL',
     );
 
-    // Encrypt remarks
     const encrypted = remarks
       ? this.crypto.encrypt(remarks)
       : { cipher: null, iv: null, tag: null };
 
-    // Get last posted report for chaining
     const lastPosted = await this.reportModel.findOne({
       where: { status: ReportStatus.POSTED },
       order: [['created_at', 'DESC']],
@@ -148,6 +184,7 @@ export class SalesService {
       sales_no: salesNo,
       report_date,
       gross_amount,
+      created_by: userId, // ✅ IMPORTANT
       remarks_cipher: encrypted.cipher,
       remarks_iv: encrypted.iv,
       remarks_tag: encrypted.tag,
@@ -155,7 +192,6 @@ export class SalesService {
       status: ReportStatus.DRAFT,
     } as any);
 
-    // Create items
     const itemRecords = items.map((item) => ({
       sales_report_id: report.id,
       payment_mode_id: item.payment_mode_id,
@@ -164,16 +200,21 @@ export class SalesService {
 
     await this.itemModel.bulkCreate(itemRecords as any);
 
-    // Reload with items for signing
     const fullReport = await this.reportModel.findByPk(report.id, {
-      include: [{ model: SalesReportItem, as: 'items' }],
+      include: [
+        { model: SalesReportItem, as: 'items' },
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['id', 'name', 'email'],
+        },
+      ],
     });
 
     if (!fullReport) {
       throw new NotFoundException('Sales report not found after creation');
     }
 
-    // Sign after items are created
     const signatureData = this.signableFields(fullReport.toJSON());
     const hmac_signature = this.crypto.sign(signatureData);
 
@@ -188,12 +229,16 @@ export class SalesService {
         sales_no: salesNo,
         report_date,
         gross_amount,
-        remarks_cipher: '[ENCRYPTED]',
+        created_by: userId,
       },
     });
 
     return this.toSafeJson(fullReport);
   }
+
+  // =====================================
+  // POST
+  // =====================================
   async post(id: string, userId: string) {
     const report = await this.reportModel.findByPk(id);
     if (!report) throw new NotFoundException('Sales report not found');
@@ -201,7 +246,7 @@ export class SalesService {
       throw new BadRequestException('Only DRAFT reports can be posted');
     }
 
-    const before = report.toJSON();
+    const before = report.status;
     report.status = ReportStatus.POSTED;
     await report.save();
 
@@ -210,24 +255,21 @@ export class SalesService {
       action: 'POST',
       tableName: 'sales_reports',
       recordId: report.id,
-      oldValue: { status: before.status },
+      oldValue: { status: before },
       newValue: { status: report.status },
     });
 
-    const updated = await this.reportModel.findByPk(id, {
-      include: ['items'],
-    });
-    if (!updated) {
-      throw new NotFoundException('Sales report not found after update');
-    }
-    return this.toSafeJson(updated);
+    return this.findOne(id);
   }
 
+  // =====================================
+  // VOID
+  // =====================================
   async voidReport(id: string, userId: string) {
     const report = await this.reportModel.findByPk(id);
     if (!report) throw new NotFoundException('Sales report not found');
 
-    const before = report.toJSON();
+    const before = report.status;
     report.status = ReportStatus.VOID;
     await report.save();
 
@@ -236,16 +278,10 @@ export class SalesService {
       action: 'VOID',
       tableName: 'sales_reports',
       recordId: report.id,
-      oldValue: { status: before.status },
+      oldValue: { status: before },
       newValue: { status: report.status },
     });
 
-    const updated = await this.reportModel.findByPk(id, {
-      include: ['items'],
-    });
-    if (!updated) {
-      throw new NotFoundException('Sales report not found after update');
-    }
-    return this.toSafeJson(updated);
+    return this.findOne(id);
   }
 }

@@ -1,17 +1,17 @@
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsISO8601, IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateCashOpeningDto {
-  @IsDateString()
+  @IsISO8601({ strict: true }) // More strict and reliable than @IsDateString()
   openingDate: string;
 
-  @Type(() => Number)
   @IsNumber()
+  @Type(() => Number)
   amount: number;
 
   @IsOptional()
-  @Type(() => Number)
   @IsNumber()
+  @Type(() => Number)
   previousAmount?: number;
 
   @IsOptional()

@@ -1,42 +1,46 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { baseApi } from "./base.api";
 
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
-
-export const rbacApi = createApi({
-  reducerPath: "rbacApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}/rbac`,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Role"],
-
+export const rbacApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // GET /rbac/roles
     getRoles: builder.query({
-      query: () => "/roles",
+      query: () => "/rbac/roles",
       providesTags: ["Role"],
     }),
 
-    // GET /rbac/roles/:id
     getRoleById: builder.query({
-      query: (id) => `/roles/${id}`,
-      providesTags: (result, error, id) => [{ type: "Role", id }],
+      query: (id) => `/rbac/roles/${id}`,
+      providesTags: (r, e, id) => [{ type: "Role", id }],
     }),
 
-    // GET /rbac/roles/:id/permissions
     getRolePermissions: builder.query({
-      query: (id) => `/roles/${id}/permissions`,
-      providesTags: (result, error, id) => [{ type: "Role", id }],
+      query: (id) => `/rbac/roles/${id}/permissions`,
+      providesTags: (r, e, id) => [{ type: "Role", id }],
+    }),
+
+    createRole: builder.mutation({
+      query: (body) => ({
+        url: "/rbac/roles",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Role"],
+    }),
+
+    updateRole: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/rbac/roles/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: ["Role"],
+    }),
+
+    deleteRole: builder.mutation({
+      query: (id) => ({
+        url: `/rbac/roles/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Role"],
     }),
   }),
 });
@@ -45,4 +49,7 @@ export const {
   useGetRolesQuery,
   useGetRoleByIdQuery,
   useGetRolePermissionsQuery,
+  useCreateRoleMutation,
+  useUpdateRoleMutation,
+  useDeleteRoleMutation,
 } = rbacApi;

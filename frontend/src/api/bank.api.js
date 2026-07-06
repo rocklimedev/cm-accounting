@@ -1,47 +1,30 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-
-const BACKEND_URL = "http://localhost:3005/api/v1"; // Replace with your backend URL
-
-export const bankApi = createApi({
-  reducerPath: "bankApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BACKEND_URL}/bank`,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem("erp_token");
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: ["Bank"],
-
+import { baseApi } from "./base.api";
+export const bankApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // GET /bank
     getBanks: builder.query({
-      query: () => "",
+      query: () => "/bank",
       providesTags: ["Bank"],
     }),
 
     // GET /bank/:id
     getBankById: builder.query({
-      query: (id) => `/${id}`,
+      query: (id) => `/bank/${id}`,
       providesTags: (result, error, id) => [{ type: "Bank", id }],
     }),
 
     // POST /bank
     createBankTransaction: builder.mutation({
       query: (data) => ({
-        url: "",
+        url: "/bank",
         method: "POST",
         body: data,
       }),
       invalidatesTags: ["Bank"],
     }),
   }),
+
+  overrideExisting: false,
 });
 
 export const {

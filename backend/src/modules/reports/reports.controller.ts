@@ -15,4 +15,8 @@ export class ReportsController {
   async dashboard(@Query() query: any) {
     return this.reportsService.dashboard(query);
   }
+  @Get('drafts')
+  async getDraftReports() {
+    return this.reportsService.getDraftReports();
+  }
 }

@@ -53,9 +53,17 @@ export class CashController {
 
   @Post('openings')
   createCashOpening(
-    @Body() dto: CreateCashOpeningDto,
+    @Body() body: any, // ← accept raw body first
     @CurrentUser('userId') userId: string,
   ) {
+    // Transform date -> openingDate
+    const dto: CreateCashOpeningDto = {
+      openingDate: body.date || body.openingDate,
+      amount: body.amount,
+      previousAmount: body.previousAmount,
+      reason: body.reason,
+    };
+
     return this.cashService.createCashOpening(dto, userId);
   }
 
@@ -75,12 +83,19 @@ export class CashController {
 
   @Post('adjustments')
   createCashAdjustment(
-    @Body() dto: CreateCashAdjustmentDto,
+    @Body() body: any, // Accept raw body
     @CurrentUser('userId') userId: string,
   ) {
+    // Transform 'date' -> 'adjustmentDate'
+    const dto: CreateCashAdjustmentDto = {
+      adjustmentDate: body.date || body.adjustmentDate,
+      type: body.type,
+      amount: body.amount,
+      reason: body.reason,
+    };
+
     return this.cashService.createCashAdjustment(dto, userId);
   }
-
   @Get('adjustments')
   getAdjustments(@Query('date') date: string) {
     return this.cashService.getAdjustments(date);
