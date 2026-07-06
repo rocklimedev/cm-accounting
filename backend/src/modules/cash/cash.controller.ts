@@ -59,6 +59,7 @@ export class CashController {
     // Transform date -> openingDate
     const dto: CreateCashOpeningDto = {
       openingDate: body.date || body.openingDate,
+
       amount: body.amount,
       previousAmount: body.previousAmount,
       reason: body.reason,

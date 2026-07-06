@@ -8,11 +8,11 @@ import { Op } from 'sequelize';
 import { DailyClosing } from './models/daily-closing.model';
 import { SalesReport } from '../sales/models/sales-report.model';
 import { ExpenseReport } from '../expense/models/expense-report.model';
-import { CashTransaction } from '../cash/models/cash-transaction.model';
 import { DebtorTransaction } from '../debtor/models/debtor-transaction.model';
 import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateDailyClosingDto } from './dto/create-daily-closing.dto';
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
 
 @Injectable()
 export class DailyClosingService {
@@ -20,11 +20,11 @@ export class DailyClosingService {
     @InjectModel(DailyClosing) private model: typeof DailyClosing,
     @InjectModel(SalesReport) private salesModel: typeof SalesReport,
     @InjectModel(ExpenseReport) private expenseModel: typeof ExpenseReport,
-    @InjectModel(CashTransaction) private cashModel: typeof CashTransaction,
     @InjectModel(DebtorTransaction)
     private debtorModel: typeof DebtorTransaction,
     private crypto: CryptoService,
     private auditService: AuditService,
+    private paymentLedgerService: PaymentLedgerService,
   ) {}
 
   findAll() {
@@ -46,27 +46,31 @@ export class DailyClosingService {
       throw new BadRequestException('Day already closed for this date');
     }
 
-    const dayStart = new Date(`${dto.report_date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${dto.report_date}T23:59:59.999Z`);
-
-    const [salesSum, expenseSum, cashRows, debtorRows] = await Promise.all([
+    const [salesSum, expenseSum, paymentSummary, debtorRows] = await Promise.all([
       this.salesModel.sum('gross_amount', {
         where: { report_date: dto.report_date, status: 'POSTED' },
       }),
       this.expenseModel.sum('total_amount', {
         where: { report_date: dto.report_date, status: 'POSTED' },
       }),
-      this.cashModel.findAll({
-        where: { created_at: { [Op.between]: [dayStart, dayEnd] } },
+      this.paymentLedgerService.getMovementSummary({
+        from: dto.report_date,
+        to: dto.report_date,
       }),
       this.debtorModel.findAll({
-        where: { created_at: { [Op.between]: [dayStart, dayEnd] } },
+        where: {
+          created_at: {
+            [Op.between]: [
+              new Date(`${dto.report_date}T00:00:00.000Z`),
+              new Date(`${dto.report_date}T23:59:59.999Z`),
+            ],
+          },
+        },
       }),
     ]);
 
-    const cash_total = cashRows.reduce(
-      (sum, tx) =>
-        sum + (tx.type === 'IN' ? Number(tx.amount) : -Number(tx.amount)),
+    const cash_total = paymentSummary.reduce(
+      (sum, mode) => sum + Number(mode.netAmount || 0),
       0,
     );
     const debtor_total = debtorRows.reduce(

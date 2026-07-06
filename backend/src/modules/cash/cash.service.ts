@@ -10,7 +10,9 @@ import { CreateCashOpeningDto } from './dto/create-cash-opening.dto';
 import { CreateCashAdjustmentDto } from './dto/create-cash-adjustment.dto';
 import { CashTransaction, FlowType } from './models/cash-transaction.model';
 import { AuditService } from '../audit/audit.service';
-
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
+import { PaymentLedgerFlowType } from '../payment-ledger/models/payment-ledger-entry.model';
+import { PaymentMode } from '../bank/models/payment-mode.model';
 @Injectable()
 export class CashService {
   constructor(
@@ -23,9 +25,26 @@ export class CashService {
     @InjectModel(CashAdjustment)
     private readonly adjustmentModel: typeof CashAdjustment,
 
-    private readonly auditService: AuditService,
-  ) {}
+    @InjectModel(PaymentMode)
+    private readonly paymentModeModel: typeof PaymentMode,
 
+    private readonly auditService: AuditService,
+    private readonly paymentLedgerService: PaymentLedgerService,
+  ) {}
+  private async getCashPaymentModeId(): Promise<string> {
+    const cash = await this.paymentModeModel.findOne({
+      where: {
+        code: 'CASH',
+        is_active: true,
+      },
+    });
+
+    if (!cash) {
+      throw new NotFoundException('Cash payment mode not found');
+    }
+
+    return cash.id;
+  }
   // =====================================
   // Cash Transactions
   // =====================================
@@ -69,6 +88,17 @@ export class CashService {
       ...dto,
       enteredBy: userId,
     } as any);
+    const paymentModeId = await this.getCashPaymentModeId();
+
+    await this.paymentLedgerService.recordOpening({
+      entryDate: dto.openingDate,
+      paymentModeId,
+      amount: dto.amount,
+      sourceType: 'CASH_OPENING',
+      sourceId: opening.id,
+      description: dto.reason || 'Opening balance',
+      createdBy: userId,
+    });
 
     await this.auditService.log({
       userId,
@@ -104,6 +134,22 @@ export class CashService {
       ...dto,
       addedBy: userId,
     } as any);
+
+    const paymentModeId = await this.getCashPaymentModeId();
+
+    await this.paymentLedgerService.recordMovement({
+      entryDate: dto.adjustmentDate,
+      paymentModeId,
+      flowType:
+        dto.type === 'add'
+          ? PaymentLedgerFlowType.IN
+          : PaymentLedgerFlowType.OUT,
+      amount: dto.amount,
+      sourceType: 'CASH_ADJUSTMENT',
+      sourceId: adjustment.id,
+      description: dto.reason,
+      createdBy: userId,
+    });
 
     await this.auditService.log({
       userId,

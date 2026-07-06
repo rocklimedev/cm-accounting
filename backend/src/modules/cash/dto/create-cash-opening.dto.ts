@@ -1,4 +1,10 @@
-import { IsISO8601, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsISO8601,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateCashOpeningDto {

@@ -9,6 +9,7 @@ import {
   CreatedAt,
 } from 'sequelize-typescript';
 import { User } from '@/modules/users/models/user.model';
+import { PaymentMode } from '@/modules/bank/models/payment-mode.model';
 
 @Table({
   tableName: 'cash_adjustments',
@@ -27,6 +28,17 @@ export class CashAdjustment extends Model<CashAdjustment> {
     allowNull: false,
   })
   declare adjustmentDate: string;
+
+  @ForeignKey(() => PaymentMode)
+  @Column({
+    field: 'payment_mode_id',
+    type: DataType.UUID,
+    allowNull: false,
+  })
+  declare paymentModeId: string;
+
+  @BelongsTo(() => PaymentMode)
+  declare paymentMode: PaymentMode;
 
   @Column({
     field: 'type',

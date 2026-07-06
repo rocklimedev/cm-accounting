@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsString,
   IsNotEmpty,
+  IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 

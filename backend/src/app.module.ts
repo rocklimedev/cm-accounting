@@ -18,6 +18,7 @@ import { EncryptionKeysModule } from './modules/encryption-keys/encryption-keys.
 import { RbacModule } from './modules/rbac/rbac.module';
 import { PaymentModeModule } from './modules/bank/payment-mode.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { SearchModule } from './modules/search/search.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -41,6 +42,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     RbacModule,
     ReportsModule,
     PaymentModeModule,
+    SearchModule,
   ],
 })
 export class AppModule {}

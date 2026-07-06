@@ -6,11 +6,19 @@ import { useGetUsersQuery } from "../../api/users.api";
 import { api } from "@/lib/api";
 import { downloadCsv } from "@/lib/reportsApi";
 import { formatMoney, formatDate } from "@/lib/format";
-import { ReportFilters } from "@/components/ReportFilters";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -50,6 +58,74 @@ import { useGetSalesQuery } from "../../api/sales.api";
 // always routes/posts against the sales-reports base path.
 const BASE_ROUTE = "sales-reports";
 
+// Status values coming back from the API are upper-cased
+// (DRAFT / SUBMITTED / EDITED_BY_ADMIN), so the filter options
+// below match that shape exactly instead of guessing at lowercase.
+const STATUSES = [
+  { v: "all", l: "All Statuses" },
+  { v: "DRAFT", l: "Draft" },
+  { v: "SUBMITTED", l: "Submitted" },
+  { v: "EDITED_BY_ADMIN", l: "Edited by Admin" },
+];
+
+const RANGES = [
+  { v: "all", l: "All Time" },
+  { v: "today", l: "Today" },
+  { v: "this_week", l: "This Week" },
+  { v: "this_month", l: "This Month" },
+  { v: "last_3_months", l: "Last 3 Months" },
+  { v: "last_6_months", l: "Last 6 Months" },
+];
+
+// Returns true if `dateStr` (YYYY-MM-DD) falls within the given range key.
+function isWithinRange(dateStr, rangeKey) {
+  if (!rangeKey || rangeKey === "all") return true;
+  if (!dateStr) return false;
+
+  const reportDate = new Date(dateStr);
+  if (Number.isNaN(reportDate.getTime())) return false;
+
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+
+  switch (rangeKey) {
+    case "today":
+      return reportDate >= startOfToday;
+    case "this_week": {
+      const dayOfWeek = now.getDay(); // 0 = Sunday
+      const startOfWeek = new Date(startOfToday);
+      startOfWeek.setDate(startOfToday.getDate() - dayOfWeek);
+      return reportDate >= startOfWeek;
+    }
+    case "this_month": {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return reportDate >= startOfMonth;
+    }
+    case "last_3_months": {
+      const cutoff = new Date(
+        now.getFullYear(),
+        now.getMonth() - 3,
+        now.getDate(),
+      );
+      return reportDate >= cutoff;
+    }
+    case "last_6_months": {
+      const cutoff = new Date(
+        now.getFullYear(),
+        now.getMonth() - 6,
+        now.getDate(),
+      );
+      return reportDate >= cutoff;
+    }
+    default:
+      return true;
+  }
+}
+
 export default function SalesReports() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -65,6 +141,7 @@ export default function SalesReports() {
 
   const [filters, setFilters] = useState(defaultFilters);
   const [applied, setApplied] = useState(defaultFilters);
+  const updateFilter = (key, value) => setFilters({ ...filters, [key]: value });
 
   // Row-action state (previously inside ReportActionMenu)
   const [activeReport, setActiveReport] = useState(null);
@@ -90,10 +167,10 @@ export default function SalesReports() {
     return allRows.filter((r) => {
       if (
         term &&
-        !String(r.submitted_by_name || "")
+        !String(r.creator?.name || "")
           .toLowerCase()
           .includes(term) &&
-        !String(r.report_id || "")
+        !String(r.sales_no || "")
           .toLowerCase()
           .includes(term)
       ) {
@@ -106,7 +183,7 @@ export default function SalesReports() {
 
       if (
         applied.submitted_by !== "all" &&
-        String(r.submitted_by) !== String(applied.submitted_by)
+        String(r.created_by) !== String(applied.submitted_by)
       ) {
         return false;
       }
@@ -121,7 +198,9 @@ export default function SalesReports() {
         return false;
       }
 
-      // Timeline filtering can be added here if needed
+      if (!isWithinRange(r.report_date, applied.timeline)) {
+        return false;
+      }
 
       return true;
     });
@@ -129,34 +208,11 @@ export default function SalesReports() {
 
   const exportCsv = () => {
     const cols = [
-      {
-        label: "Sales Report ID",
-        get: (r) => r.report_id,
-      },
-      {
-        label: "Date",
-        get: (r) => r.report_date,
-      },
-      {
-        label: "Submitted By",
-        get: (r) => r.submitted_by_name,
-      },
-      {
-        label: "Gross Amount",
-        get: (r) => r.gross_amount,
-      },
-      {
-        label: "Retail",
-        get: (r) => r.retail,
-      },
-      {
-        label: "Debtor",
-        get: (r) => r.debtor,
-      },
-      {
-        label: "Status",
-        get: (r) => r.status,
-      },
+      { label: "Sales Report ID", get: (r) => r.sales_no },
+      { label: "Date", get: (r) => r.report_date },
+      { label: "Submitted By", get: (r) => r.creator?.name },
+      { label: "Gross Amount", get: (r) => r.gross_amount },
+      { label: "Status", get: (r) => r.status },
     ];
 
     downloadCsv(`chhabra_marble_sales_${Date.now()}.csv`, rows, cols);
@@ -224,17 +280,129 @@ export default function SalesReports() {
   return (
     <Layout title="Sales Reports">
       <div className="space-y-4">
-        <ReportFilters
-          filters={filters}
-          setFilters={setFilters}
-          onApply={() => setApplied(filters)}
-          onReset={() => {
-            setFilters(defaultFilters);
-            setApplied(defaultFilters);
-          }}
-          employees={isAdmin ? employees : []}
-          showType={false}
-        />
+        {/* Filters — inlined directly here instead of a separate <ReportFilters />
+            component, and wired to the real sales-report field names. */}
+        <div
+          className="border border-border rounded-md p-4 bg-card space-y-3"
+          data-testid="reports-filters-panel"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Search Report No.</Label>
+              <Input
+                value={filters.search}
+                onChange={(e) => updateFilter("search", e.target.value)}
+                placeholder="Search..."
+                data-testid="reports-table-search-input"
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Date Range</Label>
+              <Select
+                value={filters.timeline}
+                onValueChange={(v) => updateFilter("timeline", v)}
+              >
+                <SelectTrigger className="h-9" data-testid="filter-timeline">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RANGES.map((r) => (
+                    <SelectItem key={r.v} value={r.v}>
+                      {r.l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Status</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(v) => updateFilter("status", v)}
+              >
+                <SelectTrigger className="h-9" data-testid="filter-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((st) => (
+                    <SelectItem key={st.v} value={st.v}>
+                      {st.l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {isAdmin && employees.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs">Submitted By</Label>
+                <Select
+                  value={filters.submitted_by}
+                  onValueChange={(v) => updateFilter("submitted_by", v)}
+                >
+                  <SelectTrigger
+                    className="h-9"
+                    data-testid="filter-submitted-by"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Employees</SelectItem>
+                    {employees.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs">Min Amount</Label>
+              <Input
+                type="number"
+                value={filters.min_amount}
+                onChange={(e) => updateFilter("min_amount", e.target.value)}
+                className="h-9"
+                data-testid="filter-min-amount"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Max Amount</Label>
+              <Input
+                type="number"
+                value={filters.max_amount}
+                onChange={(e) => updateFilter("max_amount", e.target.value)}
+                className="h-9"
+                data-testid="filter-max-amount"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setApplied(filters)}
+              data-testid="reports-filters-apply-button"
+            >
+              Apply Filters
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFilters(defaultFilters);
+                setApplied(defaultFilters);
+              }}
+              data-testid="reports-filters-reset-button"
+            >
+              Reset Filters
+            </Button>
+          </div>
+        </div>
 
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-border">
@@ -264,8 +432,6 @@ export default function SalesReports() {
                   <TableHead>Date</TableHead>
                   <TableHead>Submitted By</TableHead>
                   <TableHead className="text-right">Gross Amount</TableHead>
-                  <TableHead className="text-right">Retail</TableHead>
-                  <TableHead className="text-right">Debtor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -275,7 +441,7 @@ export default function SalesReports() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell colSpan={8}>
+                      <TableCell colSpan={6}>
                         <Skeleton className="h-6 w-full" />
                       </TableCell>
                     </TableRow>
@@ -283,7 +449,7 @@ export default function SalesReports() {
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={6}
                       className="text-center text-sm text-foreground/50 py-12"
                     >
                       No sales reports found.
@@ -291,16 +457,16 @@ export default function SalesReports() {
                   </TableRow>
                 ) : (
                   rows.map((report) => {
-                    const isOwner = report.submitted_by_id === user?.id;
-                    const isDraft = report.status === "draft";
+                    const isOwner = report.created_by === user?.id;
+                    const isDraft = report.status === "DRAFT";
                     const canDelete = isAdmin || (isOwner && isDraft);
                     const viewPath = `/${BASE_ROUTE}/${report.id}`;
 
                     return (
                       <TableRow
-                        key={report.report_id}
+                        key={report.id}
                         className="cursor-pointer hover:bg-secondary/70"
-                        onClick={() => navigate(`/sales-reports/${report.id}`)}
+                        onClick={() => navigate(viewPath)}
                       >
                         <TableCell className="font-medium">
                           {report.sales_no}
@@ -308,18 +474,10 @@ export default function SalesReports() {
 
                         <TableCell>{formatDate(report.report_date)}</TableCell>
 
-                        <TableCell>{report?.creator?.name}</TableCell>
+                        <TableCell>{report.creator?.name}</TableCell>
 
                         <TableCell className="text-right tabular-nums font-semibold">
                           {formatMoney(report.gross_amount)}
-                        </TableCell>
-
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(report.retail)}
-                        </TableCell>
-
-                        <TableCell className="text-right tabular-nums">
-                          {formatMoney(report.debtor)}
                         </TableCell>
 
                         <TableCell>
@@ -395,8 +553,8 @@ export default function SalesReports() {
           <DialogHeader>
             <DialogTitle>
               {dialog?.type === "delete"
-                ? `Delete Report - ${activeReport?.report_id || activeReport?.sales_no}`
-                : `Add Remark - ${activeReport?.report_id || activeReport?.sales_no}`}
+                ? `Delete Report - ${activeReport?.sales_no}`
+                : `Add Remark - ${activeReport?.sales_no}`}
             </DialogTitle>
 
             {dialog?.type === "delete" && (

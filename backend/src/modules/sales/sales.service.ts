@@ -17,6 +17,8 @@ import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
 import { DocumentNumberHelper } from '@/common/helper/document-number.helper';
 import { User } from '../users/models/user.model';
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
+import { PaymentLedgerFlowType } from '../payment-ledger/models/payment-ledger-entry.model';
 
 @Injectable()
 export class SalesService {
@@ -25,6 +27,7 @@ export class SalesService {
     @InjectModel(SalesReportItem) private itemModel: typeof SalesReportItem,
     private crypto: CryptoService,
     private auditService: AuditService,
+    private paymentLedgerService: PaymentLedgerService,
   ) {}
 
   // =====================================
@@ -240,10 +243,25 @@ export class SalesService {
   // POST
   // =====================================
   async post(id: string, userId: string) {
-    const report = await this.reportModel.findByPk(id);
+    const report = await this.reportModel.findByPk(id, {
+      include: [{ model: SalesReportItem, as: 'items' }],
+    });
     if (!report) throw new NotFoundException('Sales report not found');
     if (report.status !== ReportStatus.DRAFT) {
       throw new BadRequestException('Only DRAFT reports can be posted');
+    }
+
+    for (const item of report.items ?? []) {
+      await this.paymentLedgerService.recordMovement({
+        entryDate: report.report_date,
+        paymentModeId: item.payment_mode_id,
+        flowType: PaymentLedgerFlowType.IN,
+        amount: Number(item.amount),
+        sourceType: 'SALES_REPORT',
+        sourceId: item.id,
+        description: `Sales ${report.sales_no}`,
+        createdBy: userId,
+      });
     }
 
     const before = report.status;
@@ -266,8 +284,28 @@ export class SalesService {
   // VOID
   // =====================================
   async voidReport(id: string, userId: string) {
-    const report = await this.reportModel.findByPk(id);
+    const report = await this.reportModel.findByPk(id, {
+      include: [{ model: SalesReportItem, as: 'items' }],
+    });
     if (!report) throw new NotFoundException('Sales report not found');
+    if (report.status === ReportStatus.VOID) {
+      throw new BadRequestException('Sales report is already void');
+    }
+
+    if (report.status === ReportStatus.POSTED) {
+      for (const item of report.items ?? []) {
+        await this.paymentLedgerService.recordMovement({
+          entryDate: report.report_date,
+          paymentModeId: item.payment_mode_id,
+          flowType: PaymentLedgerFlowType.OUT,
+          amount: Number(item.amount),
+          sourceType: 'SALES_REPORT_VOID',
+          sourceId: item.id,
+          description: `Void sales ${report.sales_no}`,
+          createdBy: userId,
+        });
+      }
+    }
 
     const before = report.status;
     report.status = ReportStatus.VOID;

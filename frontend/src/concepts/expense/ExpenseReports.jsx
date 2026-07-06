@@ -6,11 +6,19 @@ import { useGetUsersQuery } from "../../api/users.api";
 import { api } from "@/lib/api";
 import { downloadCsv } from "@/lib/reportsApi";
 import { formatMoney, formatDate } from "@/lib/format";
-import { ReportFilters } from "@/components/ReportFilters";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -85,6 +93,20 @@ export default function ExpenseReports() {
   const { data: employees = [] } = useGetUsersQuery(undefined, {
     skip: !isAdmin,
   });
+
+  // Unique payment modes present across all rows, for the filter dropdown
+  const paymentModes = useMemo(() => {
+    const map = new Map();
+    allRows.forEach((row) => {
+      row.items?.forEach((item) => {
+        const mode = item.payment_mode;
+        if (mode?.id && !map.has(mode.id)) {
+          map.set(mode.id, mode.name || mode.id);
+        }
+      });
+    });
+    return Array.from(map, ([id, name]) => ({ id, name }));
+  }, [allRows]);
 
   // Client-side filtering
   const rows = useMemo(() => {
@@ -238,21 +260,146 @@ export default function ExpenseReports() {
     }
   };
 
+  // --- Filter helpers (previously inside <ReportFilters />) ---
+  // showType={false}, showPaymentMode (no showTransaction here)
+  const updateFilter = (key, value) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+
+  const resetFilters = () => {
+    setFilters(defaultFilters);
+    setApplied(defaultFilters);
+  };
+
   return (
     <Layout title="Expense Reports">
       <div className="space-y-4">
-        <ReportFilters
-          filters={filters}
-          setFilters={setFilters}
-          onApply={() => setApplied(filters)}
-          onReset={() => {
-            setFilters(defaultFilters);
-            setApplied(defaultFilters);
-          }}
-          employees={isAdmin ? employees : []}
-          showType={false}
-          showPaymentMode
-        />
+        {/* Inlined filter bar (previously <ReportFilters />) */}
+        <Card className="border border-border rounded-md bg-card shadow-none p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="expense-search">Search</Label>
+              <Input
+                id="expense-search"
+                placeholder="Report ID or submitter..."
+                value={filters.search}
+                onChange={(e) => updateFilter("search", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Timeline</Label>
+              <Select
+                value={filters.timeline}
+                onValueChange={(value) => updateFilter("timeline", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This week</SelectItem>
+                  <SelectItem value="month">This month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => updateFilter("status", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="submitted">Submitted</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {isAdmin && (
+              <div className="space-y-1">
+                <Label>Submitted By</Label>
+                <Select
+                  value={filters.submitted_by}
+                  onValueChange={(value) => updateFilter("submitted_by", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All employees</SelectItem>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={String(emp.id)}>
+                        {emp.name || emp.full_name || emp.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* showPaymentMode */}
+            <div className="space-y-1">
+              <Label>Payment Mode</Label>
+              <Select
+                value={filters.payment_mode}
+                onValueChange={(value) => updateFilter("payment_mode", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All modes</SelectItem>
+                  {paymentModes.map((mode) => (
+                    <SelectItem key={mode.id} value={mode.id}>
+                      {mode.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="min-amount">Min Amount</Label>
+              <Input
+                id="min-amount"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={filters.min_amount}
+                onChange={(e) => updateFilter("min_amount", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="max-amount">Max Amount</Label>
+              <Input
+                id="max-amount"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={filters.max_amount}
+                onChange={(e) => updateFilter("max_amount", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              Reset
+            </Button>
+            <Button size="sm" onClick={() => setApplied(filters)}>
+              Apply Filters
+            </Button>
+          </div>
+        </Card>
 
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-border">

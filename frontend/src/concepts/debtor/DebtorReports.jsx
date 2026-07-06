@@ -6,11 +6,19 @@ import { useGetUsersQuery } from "../../api/users.api";
 import { api } from "@/lib/api";
 import { downloadCsv } from "@/lib/reportsApi";
 import { formatMoney, formatDate } from "@/lib/format";
-import { ReportFilters } from "@/components/ReportFilters";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -107,9 +115,6 @@ export default function DebtorReports() {
   const allRows = useMemo(() => {
     return rawReports.map((report) => {
       const entries = report.entries || [];
-      // A report can contain multiple entries (e.g. split across payment
-      // modes). We surface the first entry's type/mode for filtering &
-      // display; totals still come from the report-level fields.
       const firstEntry = entries[0] || {};
 
       return {
@@ -183,34 +188,13 @@ export default function DebtorReports() {
 
   const exportCsv = () => {
     const columns = [
-      {
-        label: "Debtor Report ID",
-        get: (row) => row.report_id,
-      },
-      {
-        label: "Date",
-        get: (row) => row.report_date,
-      },
-      {
-        label: "Submitted By",
-        get: (row) => row.submitted_by_name,
-      },
-      {
-        label: "New Debtor",
-        get: (row) => row.new_debtor,
-      },
-      {
-        label: "Debtor Received",
-        get: (row) => row.debtor_received,
-      },
-      {
-        label: "Closing Debtor",
-        get: (row) => row.closing_debtor,
-      },
-      {
-        label: "Status",
-        get: (row) => row.status,
-      },
+      { label: "Debtor Report ID", get: (row) => row.report_id },
+      { label: "Date", get: (row) => row.report_date },
+      { label: "Submitted By", get: (row) => row.submitted_by_name },
+      { label: "New Debtor", get: (row) => row.new_debtor },
+      { label: "Debtor Received", get: (row) => row.debtor_received },
+      { label: "Closing Debtor", get: (row) => row.closing_debtor },
+      { label: "Status", get: (row) => row.status },
     ];
 
     downloadCsv(`chhabra_marble_debtor_${Date.now()}.csv`, rows, columns);
@@ -275,6 +259,16 @@ export default function DebtorReports() {
     }
   };
 
+  // --- Filter helpers (previously inside <ReportFilters />) ---
+  // showType={false}, showTransaction={true}, showPaymentMode={true}
+  const updateFilter = (key, value) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+
+  const resetFilters = () => {
+    setFilters(defaultFilters);
+    setApplied(defaultFilters);
+  };
+
   return (
     <Layout title="Debtor Reports">
       <div className="space-y-4">
@@ -290,19 +284,152 @@ export default function DebtorReports() {
           </div>
         </div>
 
-        <ReportFilters
-          filters={filters}
-          setFilters={setFilters}
-          onApply={() => setApplied(filters)}
-          onReset={() => {
-            setFilters(defaultFilters);
-            setApplied(defaultFilters);
-          }}
-          employees={isAdmin ? employees : []}
-          showType={false}
-          showTransaction
-          showPaymentMode
-        />
+        {/* Inlined filter bar (previously <ReportFilters />) */}
+        <Card className="border border-border rounded-md bg-card shadow-none p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="debtor-search">Search</Label>
+              <Input
+                id="debtor-search"
+                placeholder="Debtor no..."
+                value={filters.search}
+                onChange={(e) => updateFilter("search", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Timeline</Label>
+              <Select
+                value={filters.timeline}
+                onValueChange={(value) => updateFilter("timeline", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This week</SelectItem>
+                  <SelectItem value="month">This month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => updateFilter("status", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="submitted">Submitted</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {isAdmin && (
+              <div className="space-y-1">
+                <Label>Submitted By</Label>
+                <Select
+                  value={filters.submitted_by}
+                  onValueChange={(value) => updateFilter("submitted_by", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All employees</SelectItem>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={String(emp.id)}>
+                        {emp.name || emp.full_name || emp.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* showTransaction */}
+            <div className="space-y-1">
+              <Label>Transaction Type</Label>
+              <Select
+                value={filters.transaction_type}
+                onValueChange={(value) =>
+                  updateFilter("transaction_type", value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="debit">Debit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* showPaymentMode */}
+            <div className="space-y-1">
+              <Label>Payment Mode</Label>
+              <Select
+                value={filters.payment_mode}
+                onValueChange={(value) => updateFilter("payment_mode", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All modes</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="min-amount">Min Amount</Label>
+              <Input
+                id="min-amount"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={filters.min_amount}
+                onChange={(e) => updateFilter("min_amount", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="max-amount">Max Amount</Label>
+              <Input
+                id="max-amount"
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={filters.max_amount}
+                onChange={(e) => updateFilter("max_amount", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              Reset
+            </Button>
+            <Button size="sm" onClick={() => setApplied(filters)}>
+              Apply Filters
+            </Button>
+          </div>
+        </Card>
 
         <Card className="border border-border rounded-md bg-card shadow-none overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-border">

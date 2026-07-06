@@ -7,9 +7,11 @@ import { ReportsService } from './reports.service';
 import { ExpenseReport } from '../expense/models/expense-report.model';
 import { SalesReport } from '../sales/models/sales-report.model';
 import { DebtorReport } from '../debtor/models/debtor-reports.model';
+import { PaymentLedgerModule } from '../payment-ledger/payment-ledger.module';
 @Module({
   imports: [
     SequelizeModule.forFeature([SalesReport, ExpenseReport, DebtorReport]),
+    PaymentLedgerModule,
   ],
   controllers: [ReportsController],
   providers: [ReportsService],

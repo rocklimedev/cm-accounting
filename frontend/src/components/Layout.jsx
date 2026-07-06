@@ -1,9 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/use-auth";
+import { useLazySearchReportsQuery } from "../api/search.api";
+import { formatMoney, formatDate } from "@/lib/format";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +36,7 @@ import {
   Scale,
   Banknote,
   ClipboardList,
+  Loader2,
 } from "lucide-react";
 
 const NAV = [
@@ -133,19 +138,178 @@ function SidebarNav({ role, onNavigate }) {
   );
 }
 
+/**
+ * Live search dropdown used in the header. Debounces input, queries the
+ * existing `/search` endpoint, and renders results in a floating panel
+ * instead of navigating to a dedicated results page. Falls back to a
+ * "view all results" link that still routes to /search?q=... for people
+ * who want the full list.
+ */
+function HeaderSearch() {
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const [triggerSearch, { data, isFetching, isError }] =
+    useLazySearchReportsQuery();
+
+  const results = data?.results || [];
+  const loading = isFetching;
+  const error = isError;
+
+  // Close on outside click
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Debounced live search — RTK Query caches/dedupes per arg and always
+  // reflects the most recently triggered call, so no manual stale-response
+  // guarding is needed here.
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const term = query.trim();
+    if (!term) return;
+
+    debounceRef.current = setTimeout(() => {
+      triggerSearch({ q: term, page: 1, limit: 20 });
+    }, 300);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [query, triggerSearch]);
+
+  const goToReport = (reportId) => {
+    setOpen(false);
+    setQuery("");
+    navigate(`/reports/${reportId}`);
+  };
+
+  const viewAll = () => {
+    const term = query.trim();
+    if (!term) return;
+    setOpen(false);
+  };
+
+  const onSubmit = (e) => {
+    e.preventDefault();
+    viewAll();
+  };
+
+  const showPanel = open && query.trim().length > 0;
+
+  return (
+    <div ref={containerRef} className="relative ml-auto hidden md:block">
+      <form onSubmit={onSubmit} className="flex items-center relative">
+        <Search className="h-4 w-4 absolute left-2.5 text-foreground/50" />
+        <Input
+          data-testid="global-search-input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder="Search reports, employees..."
+          className="pl-8 w-56 lg:w-72 h-9"
+          autoComplete="off"
+        />
+        {loading && (
+          <Loader2 className="h-4 w-4 absolute right-2.5 text-foreground/40 animate-spin" />
+        )}
+      </form>
+
+      {showPanel && (
+        <div
+          className="absolute right-0 mt-2 w-[26rem] max-w-[90vw] bg-card border border-border rounded-md shadow-lg z-30 overflow-hidden"
+          data-testid="global-search-dropdown"
+        >
+          <div className="max-h-96 overflow-y-auto thin-scroll">
+            {loading ? (
+              <div className="p-2 space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : error ? (
+              <div className="p-6 text-center text-sm text-foreground/50">
+                Something went wrong. Try again.
+              </div>
+            ) : results.length === 0 ? (
+              <div className="p-6 text-center text-sm text-foreground/50">
+                No results for &ldquo;{query.trim()}&rdquo;
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {results.map((r) => (
+                  <li key={r.report_id}>
+                    <button
+                      type="button"
+                      onClick={() => goToReport(r.report_id)}
+                      className="w-full text-left px-4 py-3 hover:bg-secondary/70 transition-colors flex items-center justify-between gap-3"
+                      data-testid={`search-result-${r.report_id}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium truncate">
+                          <span className="truncate">{r.report_id}</span>
+                          <span className="text-xs font-normal text-foreground/50 capitalize shrink-0">
+                            {r.report_type}
+                          </span>
+                        </div>
+                        <div className="text-xs text-foreground/60 truncate">
+                          {r.submitted_by_name} &middot;{" "}
+                          {formatDate(r.report_date)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-sm tabular-nums font-medium">
+                          {formatMoney(r.main_amount)}
+                        </span>
+                        <StatusBadge status={r.status} />
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {!loading && !error && (
+            <button
+              type="button"
+              onClick={viewAll}
+              disabled={!query.trim()}
+              className="w-full text-center text-sm font-medium text-primary hover:bg-secondary/70 transition-colors py-2.5 border-t border-border disabled:opacity-50"
+              data-testid="search-view-all"
+            >
+              View all results for &ldquo;{query.trim()}&rdquo;
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout({ title, children }) {
   const { user, logout } = useAuth();
 
-  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const role = user?.role?.name?.toLowerCase().replace(/\s+/g, "_") ?? "";
-
-  const doSearch = (e) => {
-    e.preventDefault();
-    if (search.trim())
-      navigate(`/search?q=${encodeURIComponent(search.trim())}`);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -211,19 +375,7 @@ export default function Layout({ title, children }) {
             {title}
           </h1>
 
-          <form
-            onSubmit={doSearch}
-            className="ml-auto hidden md:flex items-center relative"
-          >
-            <Search className="h-4 w-4 absolute left-2.5 text-foreground/50" />
-            <Input
-              data-testid="global-search-input"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search reports, employees..."
-              className="pl-8 w-56 lg:w-72 h-9"
-            />
-          </form>
+          <HeaderSearch />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

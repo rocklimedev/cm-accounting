@@ -6,6 +6,7 @@ import { ExpenseReport } from '../expense/models/expense-report.model';
 import { SalesReport } from '../sales/models/sales-report.model';
 import { DebtorReport } from '../debtor/models/debtor-reports.model';
 import { User } from '../users/models/user.model';
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
 
 @Injectable()
 export class ReportsService {
@@ -18,6 +19,8 @@ export class ReportsService {
 
     @InjectModel(DebtorReport)
     private readonly debtorModel: typeof DebtorReport,
+
+    private readonly paymentLedgerService: PaymentLedgerService,
   ) {}
 
   // =====================================
@@ -358,51 +361,26 @@ export class ReportsService {
       closing: outstandingDebtor,
     };
 
-    // ====================== PAYMENT MODE (Placeholder - Improve later) ======================
-    const paymentReceipts = [
-      {
-        key: 'cash',
-        label: 'Cash',
-        amount: Math.round((retailSales + debtorReceived) * 0.55),
-      },
-      {
-        key: 'bank',
-        label: 'Bank',
-        amount: Math.round((retailSales + debtorReceived) * 0.35),
-      },
-      {
-        key: 'upi',
-        label: 'UPI / Digital',
-        amount: Math.round((retailSales + debtorReceived) * 0.1),
-      },
-    ];
-
-    const paymentModeSummary = [
-      {
-        key: 'cash',
-        label: 'Cash',
-        net_movement: Math.round(netCashInHand * 0.6),
-      },
-      {
-        key: 'bank',
-        label: 'Bank Transfer',
-        net_movement: Math.round(netCashInHand * 0.35),
-      },
-      {
-        key: 'upi',
-        label: 'Digital Payment',
-        net_movement: Math.round(netCashInHand * 0.05),
-      },
-    ];
+    const paymentModeSummary = await this.paymentLedgerService.getBalances(
+      dateEnd.toISOString().slice(0, 10),
+    );
+    const cashOpening = paymentModeSummary.reduce(
+      (sum, mode) => sum + Number(mode.opening || 0),
+      0,
+    );
+    const paymentModeBalance = paymentModeSummary.reduce(
+      (sum, mode) => sum + Number(mode.balance || 0),
+      0,
+    );
 
     return {
       cards: {
-        cash_opening: 0, // Implement proper opening balance logic later
+        cash_opening: cashOpening,
         retail_sales: retailSales,
         debtor_received: debtorReceived,
         outstanding_debtor: outstandingDebtor,
         total_expenses: totalExpenses,
-        net_cash_in_hand: netCashInHand,
+        net_cash_in_hand: paymentModeBalance,
         total_realised_sales: retailSales + debtorReceived,
         new_debtor_added: newDebtorAdded,
         new_debtor_last_date: debtors.length

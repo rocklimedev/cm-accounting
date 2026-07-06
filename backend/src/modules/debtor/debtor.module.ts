@@ -8,6 +8,7 @@ import { PaymentMode } from '../bank/models/payment-mode.model';
 import { DebtorService } from './debtor.service';
 import { DebtorController } from './debtor.controller';
 import { AuditModule } from '../audit/audit.module';
+import { PaymentLedgerModule } from '../payment-ledger/payment-ledger.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AuditModule } from '../audit/audit.module';
       PaymentMode, // <-- REQUIRED
     ]),
     AuditModule,
+    PaymentLedgerModule,
   ],
   providers: [DebtorService],
   controllers: [DebtorController],

@@ -7,12 +7,14 @@ import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { AuditModule } from '../audit/audit.module';
 import { CryptoModule } from '../crypto/crypto.module';
+import { PaymentLedgerModule } from '../payment-ledger/payment-ledger.module';
 
 @Module({
   imports: [
     SequelizeModule.forFeature([SalesReport, SalesReportItem, PaymentMode]),
     AuditModule,
     CryptoModule,
+    PaymentLedgerModule,
   ],
   providers: [SalesService],
   controllers: [SalesController],

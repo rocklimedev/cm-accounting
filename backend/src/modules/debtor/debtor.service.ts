@@ -14,6 +14,8 @@ import { CreateDebtorReportDto } from './dto/create-debtor-report.dto';
 import { CreateDebtorEntryDto } from './dto/create-debtor-entry.dto';
 import { PaymentMode } from '../bank/models/payment-mode.model';
 import { AuditService } from '../audit/audit.service';
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
+import { PaymentLedgerFlowType } from '../payment-ledger/models/payment-ledger-entry.model';
 
 @Injectable()
 export class DebtorService {
@@ -31,6 +33,7 @@ export class DebtorService {
     private readonly paymentModeModel: typeof PaymentMode,
 
     private readonly auditService: AuditService,
+    private readonly paymentLedgerService: PaymentLedgerService,
   ) {}
 
   /**
@@ -190,6 +193,25 @@ export class DebtorService {
     }
 
     const entry = await this.entryModel.create(dto as any);
+
+    if (entry.entryType === 'debtor_received' && entry.paymentModeId) {
+      const report = entry.debtorReportId
+        ? await this.reportModel.findByPk(entry.debtorReportId)
+        : null;
+
+      await this.paymentLedgerService.recordMovement({
+        entryDate: report?.reportDate ?? new Date().toISOString().slice(0, 10),
+        paymentModeId: entry.paymentModeId,
+        flowType: PaymentLedgerFlowType.IN,
+        amount: Number(entry.amount),
+        sourceType: 'DEBTOR_RECEIVED',
+        sourceId: entry.id,
+        description: report
+          ? `Debtor received ${report.debtorNo}`
+          : 'Debtor received',
+        createdBy: userId,
+      });
+    }
 
     await this.auditService.log({
       userId,

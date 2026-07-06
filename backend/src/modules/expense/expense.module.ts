@@ -9,6 +9,7 @@ import { ExpenseController } from './expense.controller';
 
 import { AuditModule } from '../audit/audit.module';
 import { PaymentMode } from '../bank/models/payment-mode.model';
+import { PaymentLedgerModule } from '../payment-ledger/payment-ledger.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { PaymentMode } from '../bank/models/payment-mode.model';
       PaymentMode,
     ]),
     AuditModule,
+    PaymentLedgerModule,
   ],
   providers: [ExpenseService],
   controllers: [ExpenseController],

@@ -18,6 +18,8 @@ import { CreateExpenseTitleDto } from './dto/create-expense-title.dto';
 import { CryptoService } from '../crypto/crypto.service';
 import { AuditService } from '../audit/audit.service';
 import { DocumentNumberHelper } from '@/common/helper/document-number.helper';
+import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
+import { PaymentLedgerFlowType } from '../payment-ledger/models/payment-ledger-entry.model';
 
 @Injectable()
 export class ExpenseService {
@@ -37,6 +39,7 @@ export class ExpenseService {
     private sequelize: Sequelize,
     private crypto: CryptoService,
     private auditService: AuditService,
+    private paymentLedgerService: PaymentLedgerService,
   ) {}
 
   // =====================================
@@ -254,10 +257,25 @@ export class ExpenseService {
   // POST REPORT
   // =====================================
   async post(id: string, userId: string) {
-    const report = await this.reportModel.findByPk(id);
+    const report = await this.reportModel.findByPk(id, {
+      include: [{ model: ExpenseItem, as: 'items' }],
+    });
     if (!report) throw new NotFoundException('Expense report not found');
     if (report.status !== ReportStatus.DRAFT) {
       throw new BadRequestException('Only DRAFT reports can be posted');
+    }
+
+    for (const item of report.items ?? []) {
+      await this.paymentLedgerService.recordMovement({
+        entryDate: report.report_date,
+        paymentModeId: item.payment_mode_id,
+        flowType: PaymentLedgerFlowType.OUT,
+        amount: Number(item.amount),
+        sourceType: 'EXPENSE_REPORT',
+        sourceId: item.id,
+        description: `Expense ${report.expense_no}`,
+        createdBy: userId,
+      });
     }
 
     const before = report.status;
@@ -280,8 +298,28 @@ export class ExpenseService {
   // VOID REPORT
   // =====================================
   async voidReport(id: string, userId: string) {
-    const report = await this.reportModel.findByPk(id);
+    const report = await this.reportModel.findByPk(id, {
+      include: [{ model: ExpenseItem, as: 'items' }],
+    });
     if (!report) throw new NotFoundException('Expense report not found');
+    if (report.status === ReportStatus.VOID) {
+      throw new BadRequestException('Expense report is already void');
+    }
+
+    if (report.status === ReportStatus.POSTED) {
+      for (const item of report.items ?? []) {
+        await this.paymentLedgerService.recordMovement({
+          entryDate: report.report_date,
+          paymentModeId: item.payment_mode_id,
+          flowType: PaymentLedgerFlowType.IN,
+          amount: Number(item.amount),
+          sourceType: 'EXPENSE_REPORT_VOID',
+          sourceId: item.id,
+          description: `Void expense ${report.expense_no}`,
+          createdBy: userId,
+        });
+      }
+    }
 
     const before = report.status;
     report.status = ReportStatus.VOID;
