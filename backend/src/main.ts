@@ -19,7 +19,17 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors();
+  // ✅ CORS CONFIG
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://cm-accounting.vercel.app',
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
 
   const port = config.get<number>('PORT') ?? 3005;
   await app.listen(port);
