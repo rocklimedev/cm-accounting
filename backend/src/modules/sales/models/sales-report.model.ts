@@ -72,6 +72,9 @@ export class SalesReport extends Model<SalesReport> {
   @Column(DataType.STRING(255))
   declare remarks_tag: string;
 
+  @Column(DataType.STRING(50))
+  declare remarks_key_version: string;
+
   // Integrity verification
   @Column(DataType.STRING(255))
   declare hmac_signature: string;

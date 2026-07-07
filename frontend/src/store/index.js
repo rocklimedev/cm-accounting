@@ -6,6 +6,7 @@ import "../api/bank.api";
 import "../api/cash.api";
 import "../api/daily-closing.api";
 import "../api/debtor.api";
+import "../api/encryption-keys.api";
 import "../api/expense.api";
 import "../api/ledger.api";
 import "../api/payment-mode.api";

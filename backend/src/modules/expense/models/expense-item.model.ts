@@ -50,4 +50,7 @@ export class ExpenseItem extends Model<ExpenseItem> {
 
   @Column(DataType.STRING(255))
   declare remarks_tag: string;
+
+  @Column(DataType.STRING(50))
+  declare remarks_key_version: string;
 }

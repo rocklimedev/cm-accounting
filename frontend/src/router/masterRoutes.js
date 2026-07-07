@@ -6,6 +6,7 @@ import expenseRoutes from "./routes/expense.routes";
 import cashRoutes from "./routes/cash.routes.jsx";
 import userRoutes from "./routes/user.routes";
 import searchRoutes from "./routes/search.routes";
+import settingsRoutes from "./routes/settings.routes";
 
 const masterRoutes = [
   ...dashboardRoutes,
@@ -15,6 +16,7 @@ const masterRoutes = [
   ...expenseRoutes,
   ...cashRoutes,
   ...userRoutes,
+  ...settingsRoutes,
   ...searchRoutes,
 ];
 

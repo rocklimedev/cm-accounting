@@ -3,7 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
+import { InjectModel, InjectConnection } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize-typescript';
 
 import { DebtorTransaction } from './models/debtor-transaction.model';
 import { DebtorReport } from './models/debtor-reports.model';
@@ -34,6 +35,9 @@ export class DebtorService {
 
     private readonly auditService: AuditService,
     private readonly paymentLedgerService: PaymentLedgerService,
+
+    @InjectConnection()
+    private readonly sequelize: Sequelize,
   ) {}
 
   /**
@@ -192,26 +196,47 @@ export class DebtorService {
       dto.paymentModeId = null;
     }
 
-    const entry = await this.entryModel.create(dto as any);
-
-    if (entry.entryType === 'debtor_received' && entry.paymentModeId) {
-      const report = entry.debtorReportId
-        ? await this.reportModel.findByPk(entry.debtorReportId)
-        : null;
-
-      await this.paymentLedgerService.recordMovement({
-        entryDate: report?.reportDate ?? new Date().toISOString().slice(0, 10),
-        paymentModeId: entry.paymentModeId,
-        flowType: PaymentLedgerFlowType.IN,
-        amount: Number(entry.amount),
-        sourceType: 'DEBTOR_RECEIVED',
-        sourceId: entry.id,
-        description: report
-          ? `Debtor received ${report.debtorNo}`
-          : 'Debtor received',
-        createdBy: userId,
+    // Wrap entry creation + ledger movement (which may also create an
+    // auto-opening) in a single transaction so a failure partway through
+    // can't leave a debtor entry with no corresponding ledger movement,
+    // and so two concurrent first-time postings against the same
+    // never-used payment mode can't both slip past the opening check
+    // and create duplicate OPENING rows.
+    const entry = await this.sequelize.transaction(async (transaction) => {
+      const createdEntry = await this.entryModel.create(dto as any, {
+        transaction,
       });
-    }
+
+      if (
+        createdEntry.entryType === 'debtor_received' &&
+        createdEntry.paymentModeId
+      ) {
+        const report = createdEntry.debtorReportId
+          ? await this.reportModel.findByPk(createdEntry.debtorReportId, {
+              transaction,
+            })
+          : null;
+
+        await this.paymentLedgerService.recordMovement(
+          {
+            entryDate:
+              report?.reportDate ?? new Date().toISOString().slice(0, 10),
+            paymentModeId: createdEntry.paymentModeId,
+            flowType: PaymentLedgerFlowType.IN,
+            amount: Number(createdEntry.amount),
+            sourceType: 'DEBTOR_RECEIVED',
+            sourceId: createdEntry.id,
+            description: report
+              ? `Debtor received ${report.debtorNo}`
+              : 'Debtor received',
+            createdBy: userId,
+          },
+          transaction,
+        );
+      }
+
+      return createdEntry;
+    });
 
     await this.auditService.log({
       userId,

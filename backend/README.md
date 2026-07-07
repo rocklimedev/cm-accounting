@@ -22,6 +22,17 @@ Generate a real 32-byte encryption key for `.env`:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+For rotation, keep every still-needed key on the server and select the active version:
+```env
+ENCRYPTION_KEYS_JSON={"v1":"<64-hex>","v2":"<64-hex>"}
+ENCRYPTION_ACTIVE_KEY_VERSION=v2
+```
+
+Existing databases should apply:
+```bash
+mysql -u root -p erp_db < migrations/20260707_encryption_key_versions.sql
+```
+
 Bootstrap the first admin (auth/register requires an existing admin, so seed one directly):
 ```bash
 npx ts-node -r dotenv/config src/scripts/seed-admin.ts admin@example.com "ChangeMe123!" "Super Admin"
@@ -39,7 +50,7 @@ Two roles per `users.role`: `ADMIN`, `ACCOUNTANT`.
 - Guards: `JwtAuthGuard` (verifies the bearer token) + `RolesGuard` (reads `@Roles()` metadata via `Reflector`). Both are applied per-controller in this scaffold; promote them to global guards in `main.ts` if you want auth-by-default everywhere.
 
 ## Encryption design (`CryptoService`, `src/modules/crypto`)
-- **Field encryption (AES-256-GCM)**: free-text remarks (`sales_reports.remarks_*`, `expense_items.remarks_*`) are encrypted before insert and decrypted only when read back through the service layer (never exposed via raw Sequelize attributes in responses).
+- **Field encryption (AES-256-GCM)**: free-text remarks (`sales_reports.remarks_*`, `expense_items.remarks_*`) are encrypted before insert and decrypted only when read back through the service layer (never exposed via raw Sequelize attributes in responses). New encrypted rows store `remarks_key_version`, so old and new key versions can coexist during rotation.
 - **HMAC-SHA256 signing**: `hmac_signature` on `sales_reports` / `expense_reports` is computed over a canonical JSON of the record's financial fields. On read, the service recomputes the HMAC and returns `integrity_verified: true/false` — any direct DB tampering with amounts is detectable.
 - **SHA-256 hash chaining**: `previous_hash` (sales/expense reports) and `daily_closing.hash` link each posted record to the prior one, like a lightweight blockchain — `DailyClosingService.verifyChain()` walks the whole `daily_closing` table and confirms no row was altered or removed.
 - **Key management**: the raw AES key lives only in `ENCRYPTION_KEY` (env var / secrets manager), never in the DB. `encryption_keys` is bookkeeping only (key version history) for rotation auditing — see comments in `encryption-key.model.ts` if you want to extend to envelope encryption / KMS.

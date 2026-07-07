@@ -88,9 +88,10 @@ export class PaymentLedgerService {
     }
 
     if (requireOpening) {
-      await this.assertOpeningExists(
+      await this.ensureOpeningExists(
         movement.paymentModeId,
         movement.entryDate,
+        movement.createdBy,
         transaction,
       );
     }
@@ -104,9 +105,23 @@ export class PaymentLedgerService {
     );
   }
 
-  async assertOpeningExists(
+  /**
+   * Ensures an OPENING entry exists for this payment mode as of entryDate.
+   *
+   * - If an opening dated on/before entryDate already exists, does nothing.
+   * - If no opening exists at all, auto-creates a zero-balance opening dated
+   *   to entryDate, so a payment mode becomes usable the first time it's
+   *   actually posted against, without requiring a manual setup step.
+   * - If an opening exists but is dated AFTER entryDate, this is a genuine
+   *   backdating conflict (e.g. someone is posting a report for a date
+   *   before the mode's recorded opening) — that needs a human decision,
+   *   so it still throws rather than silently creating a second opening
+   *   row (which would corrupt getBalances()/getMovementSummary() totals).
+   */
+  async ensureOpeningExists(
     paymentModeId: string,
     entryDate: string,
+    createdBy?: string,
     transaction?: Transaction,
   ) {
     const opening = await this.ledgerModel.findOne({
@@ -118,11 +133,38 @@ export class PaymentLedgerService {
       transaction,
     });
 
-    if (!opening) {
+    if (opening) {
+      return opening;
+    }
+
+    const anyOpening = await this.ledgerModel.findOne({
+      where: {
+        paymentModeId,
+        flowType: PaymentLedgerFlowType.OPENING,
+      },
+      transaction,
+    });
+
+    if (anyOpening) {
       throw new BadRequestException(
-        'Create opening balance for this payment mode before posting transactions',
+        `This payment mode's opening balance is dated ${anyOpening.entryDate}, ` +
+          `which is after ${entryDate}. Backdate the opening balance or use a later entry date.`,
       );
     }
+
+    return this.ledgerModel.create(
+      {
+        paymentModeId,
+        entryDate,
+        flowType: PaymentLedgerFlowType.OPENING,
+        amount: 0,
+        sourceType: 'AUTO_OPENING',
+        sourceId: paymentModeId,
+        description: 'Auto-created opening balance (0.00)',
+        createdBy,
+      } as any,
+      { transaction },
+    );
   }
 
   async getBalances(asOfDate?: string) {

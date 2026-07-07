@@ -101,12 +101,14 @@ export class ExpenseService {
         cipher: item.remarks_cipher,
         iv: item.remarks_iv,
         tag: item.remarks_tag,
+        keyVersion: item.remarks_key_version,
       });
 
       const {
         remarks_cipher,
         remarks_iv,
         remarks_tag,
+        remarks_key_version,
         payment_mode_id,
         paymentMode,
         ...rest
@@ -217,7 +219,7 @@ export class ExpenseService {
       for (const item of dto.items) {
         const encrypted = item.remarks
           ? this.crypto.encrypt(item.remarks)
-          : { cipher: null, iv: null, tag: null };
+          : { cipher: null, iv: null, tag: null, keyVersion: null };
 
         await this.itemModel.create(
           {
@@ -228,6 +230,7 @@ export class ExpenseService {
             remarks_cipher: encrypted.cipher,
             remarks_iv: encrypted.iv,
             remarks_tag: encrypted.tag,
+            remarks_key_version: encrypted.keyVersion,
           } as any,
           { transaction: t },
         );

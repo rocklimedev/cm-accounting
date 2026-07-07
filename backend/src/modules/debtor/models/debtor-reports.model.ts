@@ -91,6 +91,13 @@ export class DebtorReport extends Model<DebtorReport> {
 
   @AllowNull(true)
   @Column({
+    type: DataType.STRING(50),
+    field: 'remarks_key_version',
+  })
+  declare remarksKeyVersion?: string;
+
+  @AllowNull(true)
+  @Column({
     type: DataType.STRING(255),
     field: 'hmac_signature',
   })

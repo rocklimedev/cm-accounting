@@ -111,40 +111,6 @@ export default function Login() {
               {submitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <div className="mt-5 pt-4 border-t border-border">
-            <div className="text-xs text-foreground/60 mb-2">
-              Demo accounts (click to fill):
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => quickFill("admin@chhabramarble.com")}
-                data-testid="demo-admin-button"
-                className="text-left text-xs border border-border rounded-sm px-3 py-2 hover:bg-secondary"
-              >
-                <span className="font-semibold">Admin</span> —
-                admin@chhabramarble.com / Admin@123
-              </button>
-              <button
-                type="button"
-                onClick={() => quickFill("superadmin@chhabramarble.com")}
-                data-testid="demo-superadmin-button"
-                className="text-left text-xs border border-border rounded-sm px-3 py-2 hover:bg-secondary"
-              >
-                <span className="font-semibold">Super Admin</span> —
-                superadmin@chhabramarble.com / Super@123
-              </button>
-              <button
-                type="button"
-                onClick={() => quickFill("accountant@chhabramarble.com")}
-                data-testid="demo-accountant-button"
-                className="text-left text-xs border border-border rounded-sm px-3 py-2 hover:bg-secondary"
-              >
-                <span className="font-semibold">Accountant</span> —
-                accountant@chhabramarble.com / Account@123
-              </button>
-            </div>
-          </div>
         </Card>
       </div>
     </div>

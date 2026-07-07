@@ -6,7 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('sales')
 export class SalesController {
   constructor(private salesService: SalesService) {}

@@ -7,14 +7,15 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaymentModeService } from './payment-mode.service';
 import { CreatePaymentModeDto } from './dto/create-payment-mode.dto';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { ReconciliationService } from './reconcilation.service'; // Adjust path as needed
 import { PaymentModeReportFilterDto } from './dto/payment-mode-report.dto'; // or from reconciliation/dto
-
+@UseGuards(JwtAuthGuard)
 @Controller('payment-modes')
 export class PaymentModeController {
   constructor(

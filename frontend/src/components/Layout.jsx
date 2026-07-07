@@ -37,6 +37,7 @@ import {
   Banknote,
   ClipboardList,
   Loader2,
+  KeyRound,
 } from "lucide-react";
 
 const NAV = [
@@ -98,6 +99,12 @@ const NAV = [
     to: "/users",
     label: "Users & Permissions",
     icon: Users,
+    roles: ["super_admin", "admin"],
+  },
+  {
+    to: "/encryption-keys",
+    label: "Encryption Keys",
+    icon: KeyRound,
     roles: ["super_admin", "admin"],
   },
   {

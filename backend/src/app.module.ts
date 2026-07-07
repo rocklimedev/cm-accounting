@@ -19,6 +19,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { PaymentModeModule } from './modules/bank/payment-mode.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SearchModule } from './modules/search/search.module';
+import { PaymentLedgerModule } from './modules/payment-ledger/payment-ledger.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -42,6 +43,7 @@ import { SearchModule } from './modules/search/search.module';
     RbacModule,
     ReportsModule,
     PaymentModeModule,
+    PaymentLedgerModule,
     SearchModule,
   ],
 })

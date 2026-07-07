@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS `debtor_reports` (
   `remarks_cipher` text COLLATE utf8_unicode_ci,
   `remarks_iv` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `remarks_tag` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `remarks_key_version` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
   `hmac_signature` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `previous_hash` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `status` enum('draft','submitted','posted','void') COLLATE utf8_unicode_ci DEFAULT 'draft',
@@ -169,9 +170,16 @@ CREATE TABLE IF NOT EXISTS `debtor_transactions` (
 CREATE TABLE IF NOT EXISTS `encryption_keys` (
   `id` char(36) COLLATE utf8_unicode_ci NOT NULL,
   `key_version` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `key_fingerprint` varchar(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `status` varchar(30) COLLATE utf8_unicode_ci DEFAULT 'active',
+  `algorithm` varchar(50) COLLATE utf8_unicode_ci DEFAULT 'aes-256-gcm',
   `encrypted_key` text COLLATE utf8_unicode_ci,
+  `activated_at` timestamp NULL DEFAULT NULL,
+  `retired_at` timestamp NULL DEFAULT NULL,
+  `notes` text COLLATE utf8_unicode_ci,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_encryption_keys_key_version` (`key_version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Data exporting was unselected.
@@ -186,6 +194,7 @@ CREATE TABLE IF NOT EXISTS `expense_items` (
   `remarks_cipher` text COLLATE utf8_unicode_ci,
   `remarks_iv` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `remarks_tag` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `remarks_key_version` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_expense_items_payment_mode_id` (`payment_mode_id`),
   CONSTRAINT `fk_expense_items_payment_mode` FOREIGN KEY (`payment_mode_id`) REFERENCES `payment_modes` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
@@ -311,6 +320,7 @@ CREATE TABLE IF NOT EXISTS `sales_reports` (
   `remarks_cipher` text COLLATE utf8_unicode_ci,
   `remarks_iv` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `remarks_tag` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `remarks_key_version` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
   `hmac_signature` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `previous_hash` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `status` enum('DRAFT','POSTED','VOID') COLLATE utf8_unicode_ci DEFAULT 'DRAFT',

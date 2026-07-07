@@ -88,11 +88,18 @@ export class SalesService {
           cipher: json.remarks_cipher,
           iv: json.remarks_iv,
           tag: json.remarks_tag,
+          keyVersion: json.remarks_key_version,
         })
       : null;
 
-    const { hmac_signature, remarks_cipher, remarks_iv, remarks_tag, ...rest } =
-      json;
+    const {
+      hmac_signature,
+      remarks_cipher,
+      remarks_iv,
+      remarks_tag,
+      remarks_key_version,
+      ...rest
+    } = json;
 
     const verified = hmac_signature
       ? this.crypto.verify(this.signableFields(json), hmac_signature)
@@ -167,7 +174,7 @@ export class SalesService {
 
     const encrypted = remarks
       ? this.crypto.encrypt(remarks)
-      : { cipher: null, iv: null, tag: null };
+      : { cipher: null, iv: null, tag: null, keyVersion: null };
 
     const lastPosted = await this.reportModel.findOne({
       where: { status: ReportStatus.POSTED },
@@ -191,6 +198,7 @@ export class SalesService {
       remarks_cipher: encrypted.cipher,
       remarks_iv: encrypted.iv,
       remarks_tag: encrypted.tag,
+      remarks_key_version: encrypted.keyVersion,
       previous_hash,
       status: ReportStatus.DRAFT,
     } as any);

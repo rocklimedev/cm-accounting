@@ -5,6 +5,7 @@ import {
   Table,
   PrimaryKey,
   Default,
+  Unique,
 } from 'sequelize-typescript';
 
 /**
@@ -24,11 +25,32 @@ export class EncryptionKey extends Model<EncryptionKey> {
   @Column(DataType.UUID)
   declare id: string;
 
+  @Unique
   @Column(DataType.STRING(50))
   declare key_version: string;
 
+  @Column(DataType.STRING(64))
+  declare key_fingerprint: string;
+
+  @Default('active')
+  @Column(DataType.STRING(30))
+  declare status: string;
+
+  @Default('aes-256-gcm')
+  @Column(DataType.STRING(50))
+  declare algorithm: string;
+
   @Column(DataType.TEXT)
   declare encrypted_key: string;
+
+  @Column(DataType.DATE)
+  declare activated_at: Date;
+
+  @Column(DataType.DATE)
+  declare retired_at: Date;
+
+  @Column(DataType.TEXT)
+  declare notes: string;
 
   @Default(DataType.NOW)
   @Column(DataType.DATE)

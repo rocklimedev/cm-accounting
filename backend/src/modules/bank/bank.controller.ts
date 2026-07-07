@@ -7,8 +7,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.ACCOUNTANT)
+@UseGuards(JwtAuthGuard)
 @Controller('bank')
 export class BankController {
   constructor(private bankService: BankService) {}
@@ -24,7 +23,10 @@ export class BankController {
   }
 
   @Post()
-  create(@Body() dto: CreateBankTransactionDto, @CurrentUser('userId') userId: string) {
+  create(
+    @Body() dto: CreateBankTransactionDto,
+    @CurrentUser('userId') userId: string,
+  ) {
     return this.bankService.create(dto, userId);
   }
 }

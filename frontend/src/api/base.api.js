@@ -66,6 +66,7 @@ export const baseApi = createApi({
     "Sales",
     "Search",
     // Existing / Future Modules
+    "EncryptionKey",
     "Customer",
     "Supplier",
     "Inventory",

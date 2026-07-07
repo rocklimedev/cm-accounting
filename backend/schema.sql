@@ -155,6 +155,7 @@ CREATE TABLE sales_reports (
     remarks_cipher TEXT,
     remarks_iv VARCHAR(255),
     remarks_tag VARCHAR(255),
+    remarks_key_version VARCHAR(50),
 
     hmac_signature VARCHAR(255),
     previous_hash VARCHAR(255),
@@ -196,7 +197,8 @@ CREATE TABLE expense_items (
 
     remarks_cipher TEXT,
     remarks_iv VARCHAR(255),
-    remarks_tag VARCHAR(255)
+    remarks_tag VARCHAR(255),
+    remarks_key_version VARCHAR(50)
 );
 
 -- =========================
@@ -269,9 +271,15 @@ CREATE TABLE daily_closing (
 CREATE TABLE encryption_keys (
     id CHAR(36) PRIMARY KEY,
 
-    key_version VARCHAR(50),
+    key_version VARCHAR(50) UNIQUE,
+    key_fingerprint VARCHAR(64),
+    status VARCHAR(30) DEFAULT 'active',
+    algorithm VARCHAR(50) DEFAULT 'aes-256-gcm',
 
     encrypted_key TEXT,
+    activated_at TIMESTAMP NULL,
+    retired_at TIMESTAMP NULL,
+    notes TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -285,6 +293,7 @@ CREATE TABLE debtor_reports (
     remarks_cipher TEXT,
     remarks_iv VARCHAR(255),
     remarks_tag VARCHAR(255),
+    remarks_key_version VARCHAR(50),
     hmac_signature VARCHAR(255),
     previous_hash VARCHAR(255),
     status ENUM('draft','submitted','posted','void') DEFAULT 'draft',
