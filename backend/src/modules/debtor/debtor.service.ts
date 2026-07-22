@@ -17,6 +17,7 @@ import { PaymentMode } from '../bank/models/payment-mode.model';
 import { AuditService } from '../audit/audit.service';
 import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
 import { PaymentLedgerFlowType } from '../payment-ledger/models/payment-ledger-entry.model';
+import { computeDebtorTotals } from './debtor-totals.util';
 
 @Injectable()
 export class DebtorService {
@@ -46,6 +47,7 @@ export class DebtorService {
   private formatReport(report: DebtorReport) {
     return report.toJSON();
   }
+
   private async generateDebtorNo(): Promise<string> {
     const lastReport = await this.reportModel.findOne({
       order: [['created_at', 'DESC']],
@@ -61,6 +63,7 @@ export class DebtorService {
 
     return `DBR-${String(nextNumber).padStart(6, '0')}`;
   }
+
   // =====================================
   // Transactions
   // =====================================
@@ -123,9 +126,17 @@ export class DebtorService {
   async createReport(dto: CreateDebtorReportDto, userId: string) {
     const debtorNo = await this.generateDebtorNo();
 
+    // Snapshot the running outstanding balance as this report's opening
+    // amount at creation time. This is the one debtor amount column that
+    // legitimately gets stored rather than derived, since "opening balance
+    // as of report creation" is a point-in-time fact, not something that
+    // should shift later as more entries are added to *other* reports.
+    const { totalOutstanding } = await this.getOutstandingDebtorAmount();
+
     const report = await this.reportModel.create({
       ...dto,
       debtorNo,
+      openingAmount: totalOutstanding,
       submittedBy: userId,
     } as any);
 
@@ -143,11 +154,7 @@ export class DebtorService {
   async getReport(reportId: string) {
     const report = await this.reportModel.findByPk(reportId, {
       include: [
-        {
-          model: DebtorEntry,
-          include: [PaymentMode],
-          required: false,
-        },
+        { model: DebtorEntry, include: [PaymentMode], required: false },
       ],
     });
 
@@ -155,11 +162,14 @@ export class DebtorService {
       throw new NotFoundException('Debtor report not found');
     }
 
-    return report;
+    return {
+      ...report.toJSON(),
+      ...computeDebtorTotals(report),
+    };
   }
 
   async getLatestReport() {
-    return this.reportModel.findAll({
+    const reports = await this.reportModel.findAll({
       include: [
         {
           model: DebtorEntry,
@@ -168,6 +178,11 @@ export class DebtorService {
       ],
       order: [['report_date', 'DESC']],
     });
+
+    return reports.map((report) => ({
+      ...report.toJSON(),
+      ...computeDebtorTotals(report),
+    }));
   }
 
   // =====================================
@@ -305,23 +320,8 @@ export class DebtorService {
       throw new NotFoundException('Debtor report not found');
     }
 
-    const entries = report.entries ?? [];
-
-    let newDebtorTotal = 0;
-    let receivedTotal = 0;
-
-    for (const entry of entries) {
-      const amount = parseFloat(entry.amount as any) || 0;
-
-      if (entry.entryType === 'new_debtor') {
-        newDebtorTotal += amount;
-      } else {
-        receivedTotal += amount;
-      }
-    }
-
-    const openingAmount = parseFloat(report.openingAmount as any) || 0;
-    const closingAmount = openingAmount + newDebtorTotal - receivedTotal;
+    const { openingAmount, newDebtorTotal, receivedTotal, closingAmount } =
+      computeDebtorTotals(report);
 
     return {
       report,

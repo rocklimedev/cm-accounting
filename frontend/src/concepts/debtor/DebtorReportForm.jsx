@@ -112,10 +112,6 @@ export default function DebtorReportForm() {
     }
   }, [isEdit, outstandingData]);
 
-  useEffect(() => {
-    if (isEdit || reportError) toast.error("Failed to load report");
-  }, [isEdit, reportError]);
-
   const setEntry = (i, key, val) =>
     setForm((f) => {
       const rows = [...f.entries];

@@ -193,28 +193,6 @@ export default function Drafts() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-
-                          {isAdmin && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openDialog("remark", r)}
-                            >
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          {canDelete && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => openDialog("delete", r)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
                         </div>
                       </TableCell>
                     </TableRow>

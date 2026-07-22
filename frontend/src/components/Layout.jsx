@@ -101,12 +101,7 @@ const NAV = [
     icon: Users,
     roles: ["super_admin", "admin"],
   },
-  {
-    to: "/encryption-keys",
-    label: "Encryption Keys",
-    icon: KeyRound,
-    roles: ["super_admin", "admin"],
-  },
+
   {
     to: "/export",
     label: "Export Reports",

@@ -122,32 +122,6 @@ export function ReportActionMenu({ report, onChanged }) {
             <Eye className="mr-2 h-4 w-4" />
             View Details
           </DropdownMenuItem>
-
-          {isAdmin && (
-            <DropdownMenuItem
-              onClick={() => {
-                setRemark("");
-                setDialog({ type: "remark" });
-              }}
-            >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Add Remark
-            </DropdownMenuItem>
-          )}
-
-          {canDelete && (
-            <>
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setDialog({ type: "delete" })}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
-          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

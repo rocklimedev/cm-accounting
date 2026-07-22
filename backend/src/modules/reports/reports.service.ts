@@ -5,8 +5,10 @@ import { Op } from 'sequelize';
 import { ExpenseReport } from '../expense/models/expense-report.model';
 import { SalesReport } from '../sales/models/sales-report.model';
 import { DebtorReport } from '../debtor/models/debtor-reports.model';
+import { DebtorEntry } from '../debtor/models/debtor-entries.model';
 import { User } from '../users/models/user.model';
 import { PaymentLedgerService } from '../payment-ledger/payment-ledger.service';
+import { computeDebtorTotals } from '../debtor/debtor-totals.util';
 
 @Injectable()
 export class ReportsService {
@@ -125,26 +127,31 @@ export class ReportsService {
 
       const debtors = await this.debtorModel.findAll({
         where,
+        include: [{ model: DebtorEntry }],
       });
 
       rows.push(
-        ...debtors.map((r) => ({
-          report_id: r.id,
-          report_no: r.debtorNo,
-          report_date: r.reportDate,
-          report_type: 'debtor',
+        ...debtors.map((r) => {
+          const { closingAmount } = computeDebtorTotals(r);
 
-          main_amount: Number(r.closingAmount),
+          return {
+            report_id: r.id,
+            report_no: r.debtorNo,
+            report_date: r.reportDate,
+            report_type: 'debtor',
 
-          created_by: r.submittedBy,
-          created_by_name: '-',
+            main_amount: closingAmount,
 
-          submitted_by: r.submittedBy,
-          submitted_at: r.createdAt,
-          updated_at: r.createdAt,
+            created_by: r.submittedBy,
+            created_by_name: '-',
 
-          status: r.status,
-        })),
+            submitted_by: r.submittedBy,
+            submitted_at: r.createdAt,
+            updated_at: r.createdAt,
+
+            status: r.status,
+          };
+        }),
       );
     }
 
@@ -199,9 +206,8 @@ export class ReportsService {
   }
 
   // =====================================
-  // DASHBOARD (unchanged logic)
+  // DASHBOARD
   // =====================================
-  // reports.service.ts
   async dashboard(query: any) {
     const {
       timeline = 'this_month',
@@ -265,7 +271,7 @@ export class ReportsService {
     const dateFilter = { [Op.between]: [dateStart, dateEnd] };
 
     // Fetch all data in parallel
-    const [sales, expenses, debtors] = await Promise.all([
+    const [sales, expenses, debtorReportsRaw] = await Promise.all([
       this.salesModel.findAll({
         where: { report_date: dateFilter },
         include: [
@@ -290,8 +296,17 @@ export class ReportsService {
 
       this.debtorModel.findAll({
         where: { reportDate: dateFilter },
+        include: [{ model: DebtorEntry }],
+        order: [['reportDate', 'ASC']],
       }),
     ]);
+
+    // Derive real totals per debtor report from its entries, since the
+    // stored columns on DebtorReport are not kept in sync.
+    const debtors = debtorReportsRaw.map((d) => ({
+      ...d.toJSON(),
+      ...computeDebtorTotals(d),
+    }));
 
     // ====================== CARDS ======================
     const retailSales = sales.reduce(
@@ -310,10 +325,13 @@ export class ReportsService {
       (sum, d) => sum + Number(d.newDebtorTotal || 0),
       0,
     );
-    const outstandingDebtor = debtors.reduce(
-      (sum, d) => sum + Number(d.closingAmount || 0),
-      0,
-    );
+    // Outstanding debtor as of the end of the period should reflect the
+    // closing balance of the most recent report in range, not a sum of
+    // every report's closing amount (summing closings across reports
+    // double-counts the running balance).
+    const outstandingDebtor = debtors.length
+      ? Number(debtors[debtors.length - 1].closingAmount || 0)
+      : 0;
 
     const netCashInHand = retailSales + debtorReceived - totalExpenses;
 
@@ -351,11 +369,12 @@ export class ReportsService {
       .slice(0, 10);
 
     // ====================== DEBTOR TREND ======================
+    // "opening" for the period is the opening balance of the earliest
+    // report in range (debtors is sorted ASC by reportDate above), not a
+    // sum of every report's own opening snapshot — summing per-report
+    // openings double-counts the running balance across the period.
     const debtorTrend = {
-      opening: debtors.reduce(
-        (sum, d) => sum + Number(d.openingAmount || 0),
-        0,
-      ),
+      opening: debtors.length ? Number(debtors[0].openingAmount || 0) : 0,
       new_debtor: newDebtorAdded,
       received: debtorReceived,
       closing: outstandingDebtor,
